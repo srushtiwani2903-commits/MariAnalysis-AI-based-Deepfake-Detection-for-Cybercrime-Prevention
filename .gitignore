@@ -1,0 +1,42 @@
+# ---------- Dependencies ----------
+node_modules/
+.venv/
+venv/
+env/
+
+# ---------- Build output ----------
+frontend/build/
+frontend/.cache/
+*.tsbuildinfo
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ---------- Environment & secrets (never commit!) ----------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ---------- Runtime data ----------
+backend/deepfake.db
+backend/uploads/*
+backend/reports/*
+!backend/uploads/.gitkeep
+!backend/reports/.gitkeep
+backend/models/weights/*
+
+# ---------- Logs / OS ----------
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# ---------- IDE ----------
+.idea/
+.vscode/

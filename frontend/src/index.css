@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #f1f5f9;
+    --fg: #0f172a;
+    --muted: #64748b;
+  }
+
+  html.dark {
+    --bg: #050816;
+    --fg: #e2e8f0;
+    --muted: #94a3b8;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    transition: background-color 0.4s ease, color 0.4s ease;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: rgba(34, 211, 238, 0.35);
+    color: inherit;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #22d3ee, #7c3aed);
+    border-radius: 8px;
+  }
+}
+
+@layer components {
+  /* Glassmorphism card */
+  .glass {
+    @apply bg-white/60 dark:bg-white/5 backdrop-blur-xl border border-slate-200 dark:border-white/10 shadow-glass;
+  }
+
+  .glass-strong {
+    @apply bg-white/80 dark:bg-white/10 backdrop-blur-2xl border border-slate-200 dark:border-white/10 shadow-glass;
+  }
+
+  /* Neon gradient text */
+  .neon-text {
+    @apply bg-gradient-to-r from-neon-blue via-neon-cyan to-neon-purple bg-clip-text text-transparent;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-semibold
+      text-white bg-gradient-to-r from-neon-blue to-neon-purple
+      hover:shadow-glow transition-all duration-300 hover:scale-[1.02] active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-semibold
+      text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-white/10 border
+      border-slate-200 dark:border-white/10 hover:border-neon-blue/60 transition-all duration-300;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-semibold
+      text-white bg-rose-500 hover:bg-rose-600 transition-all duration-300;
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full rounded-xl px-4 py-2.5 bg-white/70 dark:bg-white/5 border
+      border-slate-200 dark:border-white/10 focus:border-neon-blue
+      focus:ring-2 focus:ring-neon-blue/30 outline-none transition-all duration-300;
+  }
+
+  /* Animated grid backdrop */
+  .cyber-grid {
+    background-image:
+      linear-gradient(rgba(34, 211, 238, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34, 211, 238, 0.06) 1px, transparent 1px);
+    background-size: 45px 45px;
+  }
+
+  /* Section container */
+  .container-app {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+}
+
+/* Scan line animation overlay */
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.scan-overlay::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 90px;
+  top: 0%;
+  animation: scanline 2.2s ease-in-out infinite;
+  background: linear-gradient(180deg, transparent, rgba(34, 211, 238, 0.25), transparent);
+}
+@keyframes scanline {
+  0%, 100% { top: -10%; }
+  50% { top: 110%; }
+}
+
+/* Typing cursor for terminal styling */
+.terminal-cursor::after {
+  content: "▊";
+  color: #22d3ee;
+  animation: blink 1s step-end infinite;
+  margin-left: 2px;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Shimmer loading bar */
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.4), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2.5s linear infinite;
+}
+
+/* Progress bar with glow */
+.glow-progress {
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.6);
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Fade-in helper */
+.fade-in {
+  animation: fadeIn 0.5s ease forwards;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
