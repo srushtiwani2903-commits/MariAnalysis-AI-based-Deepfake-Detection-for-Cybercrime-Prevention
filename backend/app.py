@@ -1,9 +1,10 @@
-"""DeepGuard AI - Flask application factory and entry point.
+﻿"""MariAnalysis - Flask application factory and entry point.
 
 Run locally:   python run.py
 Run in prod:   gunicorn -w 4 -b 0.0.0.0:5000 app:app
 """
 import os
+from datetime import datetime, timezone
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -11,7 +12,7 @@ from werkzeug.security import generate_password_hash
 
 from config import Config
 from extensions import db, jwt
-from models import User
+from models import ActiveSession, User
 
 # Register blueprints
 from routes.admin import admin_bp
@@ -29,9 +30,39 @@ def create_app(config_class=Config):
     # --- CORS ---
     CORS(app, resources={r"/api/*": {"origins": Config.CORS_ORIGINS}}, supports_credentials=False)
 
+    # --- Security headers on every response ---
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("X-XSS-Protection", "1; mode=block")
+        response.headers.setdefault("Permissions-Policy",
+                                    "geolocation=(), microphone=(), camera=(), autoplay=(self)")
+        if response.content_type and "text/html" in response.content_type:
+            response.headers.setdefault("Content-Security-Policy",
+                                        "default-src 'self'; img-src 'self' data:; "
+                                        "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'")
+        response.headers.setdefault("Cache-Control",
+                                    "no-store, no-cache, must-revalidate, max-age=0")
+        return response
+
     # --- Extensions ---
     db.init_app(app)
     jwt.init_app(app)
+
+    # --- Revoked-session check: a JWT is rejected (401) as soon as its
+    # ActiveSession row is deactivated, e.g. by a newer login somewhere else
+    # or by logout. This is what makes the kicked-out device fail immediately.
+    @jwt.token_in_blocklist_loader
+    def check_session_revoked(_jwt_header, jwt_payload):
+        jti = jwt_payload.get("jti")
+        if not jti:
+            return True
+        session = ActiveSession.query.filter_by(jti=jti).first()
+        if not session or not session.is_active:
+            return True
+        return session.expires_at < datetime.now(timezone.utc).replace(tzinfo=None)
 
     # --- Blueprints ---
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -44,7 +75,7 @@ def create_app(config_class=Config):
     @app.get("/")
     def root():
         return jsonify({
-            "name": "DeepGuard AI",
+            "name": "MariAnalysis",
             "version": "1.0.0",
             "description": "AI-Based Deepfake Detection for Cybercrime Prevention",
             "docs": "/api/docs",
@@ -60,12 +91,15 @@ def create_app(config_class=Config):
         """Inline API documentation (also rendered on the frontend Docs page)."""
         return jsonify({
             "endpoints": {
-                "auth": ["POST /api/auth/register", "POST /api/auth/login",
+                "auth": ["POST /api/auth/register", "POST /api/auth/login (email, username or phone)",
+                         "POST /api/auth/verify-email", "POST /api/auth/verify-phone",
+                         "POST /api/auth/resend-otp",
                          "POST /api/auth/forgot-password", "POST /api/auth/reset-password",
                          "GET /api/auth/me", "PUT /api/auth/profile",
                          "POST /api/auth/change-password"],
                 "detection": ["POST /api/detect/image", "POST /api/detect/video",
-                              "POST /api/detect/audio", "POST /api/detect/text"],
+                              "POST /api/detect/audio", "POST /api/detect/text",
+                              "POST /api/detect/url (analyze media from a remote URL)"],
                 "history": ["GET /api/history", "GET /api/history/stats",
                             "GET /api/history/<id>", "DELETE /api/history/<id>"],
                 "analytics": ["GET /api/analytics/overview", "GET /api/analytics/daily",
@@ -113,6 +147,21 @@ def create_app(config_class=Config):
             )
             db.session.add(admin)
             db.session.commit()
+
+    # --- Kaggle credential check (data is fetched on-demand during training,
+    # never downloaded at startup) ---
+    if Config.KAGGLE_AUTOSYNC:
+        from ml.kaggle_pipeline import write_kaggle_json
+        import threading
+
+        def _check_creds():
+            try:
+                write_kaggle_json()
+                app.logger.info("Kaggle credentials OK (data is pulled on-demand during training).")
+            except Exception as exc:  # noqa: BLE001
+                app.logger.warning("Kaggle credentials missing: %s", exc)
+
+        threading.Thread(target=_check_creds, daemon=True).start()
 
     return app
 

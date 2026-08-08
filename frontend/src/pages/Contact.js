@@ -81,16 +81,16 @@ export default function Contact() {
           <div className="glass rounded-2xl p-6 space-y-4">
             <h3 className="font-bold">Reach us directly</h3>
             <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-              <EnvelopeIcon className="w-5 h-5 text-neon-blue" /> support@deepguard.ai
+              <EnvelopeIcon className="w-5 h-5 text-neon-blue" /> support@marianalysis.ai
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
               <MapPinIcon className="w-5 h-5 text-neon-blue" /> Global · Remote · 24/7 monitoring
             </div>
             <div className="flex gap-3 pt-2">
               {[
-                [GitHubIcon, "github.com/deepguard"],
-                [LinkedInIcon, "linkedin.com/company/deepguard"],
-                [TwitterIcon, "@deepguard_ai"],
+                [GitHubIcon, "github.com/marianalysis"],
+                [LinkedInIcon, "linkedin.com/company/marianalysis"],
+                [TwitterIcon, "@marianalysis_ai"],
                 [WhatsAppIcon, "+1 (555) 010-2299"],
               ].map(([Icon, label], i) => (
                 <a key={i} href="#" title={label} className="p-2.5 rounded-xl glass hover:text-neon-blue hover:border-neon-blue/50 transition-all">

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  UserIcon, EnvelopeIcon, LockClosedIcon, ExclamationTriangleIcon,
-  CheckCircleIcon, KeyIcon,
+  UserIcon, EnvelopeIcon, LockClosedIcon, CheckCircleIcon,
+  KeyIcon, PhoneIcon,
 } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
 import api from "../api/api";
@@ -12,7 +12,9 @@ import { formatDate } from "../utils/format";
 export default function Profile() {
   const { user, refreshUser } = useAuth();
   const [fullName, setFullName] = useState(user?.full_name || "");
+  const [phone, setPhone] = useState(user?.phone || "");
   const [saved, setSaved] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const [pw, setPw] = useState({ current: "", next: "" });
   const [pwMsg, setPwMsg] = useState("");
   const [pwErr, setPwErr] = useState("");
@@ -25,10 +27,15 @@ export default function Profile() {
   const saveProfile = async (e) => {
     e.preventDefault();
     setSaved(false);
-    await api.put("/auth/profile", { full_name: fullName });
-    await refreshUser();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setSaveErr("");
+    try {
+      const { data } = await api.put("/auth/profile", { full_name: fullName, phone });
+      await refreshUser();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setSaveErr(err.response?.data?.message || err.message);
+    }
   };
 
   const changePassword = async (e) => {
@@ -54,7 +61,10 @@ export default function Profile() {
           <p className="text-slate-500 dark:text-slate-400">@{user?.username} · {user?.email}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             {user?.is_admin && <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-neon-purple/15 text-neon-purple">ADMIN</span>}
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400">VERIFIED</span>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400">EMAIL VERIFIED</span>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${user?.phone ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-500/15 text-slate-400"}`}>
+              {user?.phone ? "PHONE SET" : "NO PHONE"}
+            </span>
             <span className="text-xs font-bold px-2.5 py-1 rounded-full glass">Joined {formatDate(user?.created_at)}</span>
           </div>
         </div>
@@ -90,8 +100,18 @@ export default function Profile() {
                 <input value={user?.email || ""} disabled className="input !pl-11 opacity-60" />
               </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Phone Number <span className="text-slate-400 font-normal">(optional — for phone login)</span></label>
+              <div className="relative">
+                <PhoneIcon className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input !pl-11" placeholder="+91 98765 43210" />
+              </div>
+            </div>
             {saved && (
               <p className="flex items-center gap-2 text-emerald-400 text-sm"><CheckCircleIcon className="w-4 h-4" /> Profile updated.</p>
+            )}
+            {saveErr && (
+              <p className="flex items-center gap-2 text-rose-400 text-sm"><CheckCircleIcon className="w-4 h-4" /> {saveErr}</p>
             )}
             <button type="submit" className="btn-primary w-full justify-center">Save Changes</button>
           </form>

@@ -1,76 +1,53 @@
-"""AI service orchestrator.
+﻿"""AI service orchestrator.
 
-Selects the correct analyzer per media type and inserts a plug point for real
-trained models. When MODEL_ENABLED is False, the smart heuristic engines provide
-production-ready "dummy" predictions so the full product works out of the box.
-To integrate a real model later:
-  1. Train/save weights under backend/models/weights
-  2. Set MODEL_ENABLED=true in the environment
-  3. Implement `predict_*` below (or drop a load_model() hook in).
+Selects the correct analyzer per media type. Runs the smart heuristic
+engines (ELA, spectral analysis, NLP metrics, temporal analysis) which need
+no model weights, so the full product works out of the box.
 
 Every result dict shares the same schema so the frontend never changes.
 """
+import logging
 import time
 
-from config import Config
+from ml.data_config import get_registry
 from services.analyze_audio import analyze_audio
 from services.analyze_image import analyze_image
 from services.analyze_text import analyze_text
 from services.analyze_video import analyze_video
 
+logger = logging.getLogger("ai_service")
+
+# Reference Kaggle dataset backing each media type's heuristic scan.
+# Primary dataset per media type: first registry entry wins (extra/optional
+# datasets are appended later, so they never shadow the main reference).
+_REFERENCE_DATASETS = {}
+for _entry in get_registry():
+    if _entry["media"] not in _REFERENCE_DATASETS:
+        _REFERENCE_DATASETS[_entry["media"]] = _entry["slug"]
+
 
 class AIService:
-    def __init__(self):
-        self.model_enabled = Config.MODEL_ENABLED
-        self._models = {}
-
-    # ------------------------------------------------------------------ #
-    # Real-model plug points (implement when you have trained weights)   #
-    # ------------------------------------------------------------------ #
-    def _load_real_models(self):
-        """Load trained CNN/ViT weights once. Called only when MODEL_ENABLED=True."""
-        if not self.model_enabled or self._models:
-            return
-        # Example placeholder - replace with your model loading code.
-        # import torch
-        # self._models["image"] = torch.load(os.path.join(Config.MODEL_PATH, "image_vit.pt"))
-        pass
-
-    def predict_image_real(self, file_path):
-        raise NotImplementedError("Integrate your CNN/ViT image model here.")
-
-    def predict_video_real(self, file_path):
-        raise NotImplementedError("Integrate your temporal video model here.")
-
-    def predict_audio_real(self, file_path):
-        raise NotImplementedError("Integrate your voice-clone model here.")
-
-    def predict_text_real(self, text):
-        # Already integrated optionally via HuggingFace in analyze_text.
-        return None
-
-    # ------------------------------------------------------------------ #
-    # Public API                                                         #
-    # ------------------------------------------------------------------ #
     def analyze(self, media_type: str, file_path: str, filename: str, size_bytes: int,
                 text: str = None):
         """Run the full pipeline and return a normalised prediction result."""
         started = time.time()
 
         if media_type == "image":
-            result = analyze_image(file_path, filename, size_bytes, self.model_enabled)
+            result = analyze_image(file_path, filename, size_bytes)
         elif media_type == "video":
-            result = analyze_video(file_path, filename, size_bytes, self.model_enabled)
+            result = analyze_video(file_path, filename, size_bytes)
         elif media_type == "audio":
-            result = analyze_audio(file_path, filename, size_bytes, self.model_enabled)
+            result = analyze_audio(file_path, filename, size_bytes)
         elif media_type == "text":
-            result = analyze_text(text or "", filename or "text-input.txt", self.model_enabled)
+            result = analyze_text(text or "", filename or "text-input.txt")
         else:
             result = {"error": "Unsupported media type."}
 
         if "error" not in result:
             result["model_version"] = "1.0.0"
             result["total_pipeline_ms"] = int((time.time() - started) * 1000)
+            result["reference_dataset"] = _REFERENCE_DATASETS.get(media_type, "")
+            result["reference_source"] = "kaggle"
             result["explainable_ai"] = self._build_xai(result)
         return result
 

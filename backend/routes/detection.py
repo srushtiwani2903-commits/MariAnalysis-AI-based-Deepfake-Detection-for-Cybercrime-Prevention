@@ -18,6 +18,7 @@ from extensions import db
 from models import AIPrediction, Log, ScanHistory
 from services.ai_service import service
 from utils.helpers import save_upload
+from utils.idps import audit
 from utils.security import (limiter, sanitize_filename, sanitize_text, validate_upload)
 
 detect_bp = Blueprint("detect", __name__)
@@ -31,6 +32,9 @@ def _rate_limit():
 
 
 def _store_scan(user_id, scan_type, filename, original_filename, file_path, file_size, result, text_content=None):
+    metadata = dict(result.get("metadata", {}))
+    metadata["reference_dataset"] = result.get("reference_dataset", "")
+    metadata["reference_source"] = result.get("reference_source", "")
     scan = ScanHistory(
         user_id=user_id,
         scan_type=scan_type,
@@ -46,7 +50,7 @@ def _store_scan(user_id, scan_type, filename, original_filename, file_path, file
         recommendations=result.get("recommendations", ""),
         suspicious_sections=result.get("suspicious_sections", []),
         processing_time_ms=result.get("processing_time_ms", 0),
-        scan_metadata=result.get("metadata", {}),
+        scan_metadata=metadata,
     )
     db.session.add(scan)
     db.session.flush()
@@ -63,6 +67,8 @@ def _store_scan(user_id, scan_type, filename, original_filename, file_path, file
                        details=f"{filename} -> {result['result']}",
                        ip_address=request.remote_addr))
     db.session.commit()
+    audit("create", user_id, "ScanHistory", scan.id, request.remote_addr,
+          f"{scan_type} scan -> {result['result']}")
     return scan.id
 
 
@@ -145,3 +151,71 @@ def detect_text():
 def health():
     return jsonify({"status": "ok", "model_enabled": Config.MODEL_ENABLED,
                     "engine": "heuristic-v1" if not Config.MODEL_ENABLED else "trained-models"})
+
+
+@detect_bp.route("/url", methods=["POST"])
+@jwt_required()
+def detect_url():
+    """Fetch a media file from a URL and analyze it (same pipeline as upload)."""
+    if _rate_limit():
+        return jsonify({"message": "Too many requests. Try again later."}), 429
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    media_type = (data.get("media_type") or "").strip().lower()
+    if not url:
+        return jsonify({"message": "A 'url' is required."}), 400
+    if media_type not in Config.ALLOWED_IMAGE | Config.ALLOWED_VIDEO | Config.ALLOWED_AUDIO:
+        # Map common terms to extensions, else default to image.
+        media_type = {"image": "image", "video": "video", "audio": "audio"}.get(
+            media_type, "image")
+
+    from utils.helpers import fetch_from_url
+    try:
+        stream, size, content_type = fetch_from_url(url, Config.MAX_CONTENT_LENGTH)
+    except ValueError as exc:
+        return jsonify({"message": str(exc)}), 400
+    except Exception:  # noqa: BLE001
+        return jsonify({"message": "Could not fetch the URL."}), 400
+
+    # Pick an extension from content-type or the URL path.
+    ext = _ext_for_content_type(content_type) or "jpg"
+    allowed = {
+        "image": Config.ALLOWED_IMAGE,
+        "video": Config.ALLOWED_VIDEO,
+        "audio": Config.ALLOWED_AUDIO,
+    }
+    if media_type != "image" and ext in allowed[media_type]:
+        pass
+    elif ext in allowed["image"]:
+        media_type = "image"
+    elif ext in allowed["video"]:
+        media_type = "video"
+    elif ext in allowed["audio"]:
+        media_type = "audio"
+    else:
+        return jsonify({"message": "Unsupported media type from URL."}), 400
+
+    if not allowed[media_type].__contains__(ext):
+        return jsonify({"message": f"File type not allowed for {media_type} detection."}), 400
+
+    from werkzeug.datastructures import FileStorage
+    file = FileStorage(stream=stream, filename=f"remote.{ext}")
+    path, stored_name, size = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
+    scan_id, result = _analyze_and_store(media_type, stored_name, sanitize_filename(url.split("/")[-1] or "remote"), path, size)
+    if result is None:
+        return jsonify({"message": result["error"]}), 500
+    result["source_url"] = url
+    return jsonify({"result": result}), 200
+
+
+def _ext_for_content_type(content_type: str):
+    mapping = {
+        "jpeg": "jpg", "jpg": "jpg", "png": "png", "webp": "webp",
+        "bmp": "bmp", "tiff": "tiff", "mp4": "mp4", "quicktime": "mov",
+        "x-msvideo": "avi", "ogg": "ogg", "wav": "wav", "mpeg": "mp3",
+        "mpeg3": "mp3", "m4a": "m4a", "flac": "flac", "matroska": "mkv",
+    }
+    for key, ext in mapping.items():
+        if key in content_type.lower():
+            return ext
+    return None

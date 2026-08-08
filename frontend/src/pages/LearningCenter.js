@@ -55,12 +55,12 @@ const articles = [
 ];
 
 const faqs = [
-  ["How accurate is DeepGuard AI?", "In heuristic mode the ensemble achieves ~85-92% on typical media. When connected to trained CNN/ViT models, accuracy reaches 96%+ on benchmark datasets such as FaceForensics++ and DFDC."],
+  ["How accurate is MariAnalysis?", "In heuristic mode the ensemble achieves ~85-92% on typical media. When connected to trained CNN/ViT models, accuracy reaches 96%+ on benchmark datasets such as FaceForensics++ and DFDC."],
   ["Is my uploaded file stored?", "Files are stored locally on the server for analysis and included in your scan history. You can delete any scan (and its file) at any time."],
   ["Can I use this for legal evidence?", "Reports are forensic-guidance documents. For legal evidence, use certified forensic tools and chain-of-custody procedures."],
   ["Does it work on any image format?", "PNG, JPG, JPEG, WebP, BMP and TIFF are supported. Video: MP4, AVI, MOV, MKV, WebM. Audio: MP3, WAV, OGG, FLAC, M4A."],
   ["What makes text detection work?", "We score perplexity (token flow smoothness), burstiness (sentence-length variance) and repetition. LLM-generated text scores low perplexity, low burstiness and high repetition."],
-  ["Can I integrate a custom model?", "Yes. Set MODEL_ENABLED=true and implement the prediction hooks in backend/services/ai_service.py. The API schema stays identical."],
+  ["Can I use a custom model?", "The app currently runs on its built-in heuristic engines, which need no model weights. The API schema is stable, so future model backends can plug in without frontend changes."],
 ];
 
 export default function LearningCenter() {

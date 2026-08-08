@@ -1,8 +1,7 @@
 """Image deepfake analysis.
 
 Heuristic engine (works without a model): Error Level Analysis (ELA) + color
-statistics + metadata forensics. When MODEL_ENABLED is True the module tries to
-load a real CNN/Vision-Transformer model from MODEL_PATH (see _load_real_model).
+statistics + metadata forensics.
 """
 import hashlib
 import io
@@ -59,7 +58,7 @@ def _random_noise(seed_bytes):
     return rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(0, 2)
 
 
-def analyze_image(file_path, filename, size_bytes, model_enabled=False):
+def analyze_image(file_path, filename, size_bytes):
     """Run the full image pipeline. Returns a prediction result dict."""
     start = time.time()
 
@@ -139,7 +138,7 @@ def analyze_image(file_path, filename, size_bytes, model_enabled=False):
         "processing_time_ms": elapsed,
         "metadata": {k: v for k, v in list(meta.items())[:25]},
         "features": features,
-        "model": "heuristic-vision-v1" if not model_enabled else "CNN+ViT-ensemble",
+        "model": "heuristic-vision-v1",
         "heatmap_available": True,
         "verified": False,
     }

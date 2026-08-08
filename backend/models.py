@@ -18,11 +18,19 @@ class User(db.Model):
     full_name = db.Column(db.String(120), default="")
     is_admin = db.Column(db.Boolean, default=False)
     is_verified = db.Column(db.Boolean, default=False)
+    phone = db.Column(db.String(24), unique=True, nullable=True, index=True)
+    phone_verified = db.Column(db.Boolean, default=False)
+    otp_code = db.Column(db.String(128), nullable=True)
+    otp_expires = db.Column(db.DateTime, nullable=True)
+    otp_attempts = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
+    reset_token = db.Column(db.String(128), nullable=True)
+    reset_token_expires = db.Column(db.DateTime, nullable=True)
 
     scans = db.relationship("ScanHistory", backref="user", lazy="dynamic", cascade="all, delete-orphan")
     reports = db.relationship("Report", backref="user", lazy="dynamic", cascade="all, delete-orphan")
+    sessions = db.relationship("ActiveSession", backref="user", lazy="dynamic", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -32,10 +40,27 @@ class User(db.Model):
             "full_name": self.full_name,
             "is_admin": self.is_admin,
             "is_verified": self.is_verified,
+            "phone": self.phone,
+            "phone_verified": self.phone_verified,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
             "scan_count": self.scans.count(),
         }
+
+
+class ActiveSession(db.Model):
+    """One row per logged-in session (JWT jti). Used to detect duplicate logins
+    and to revoke sessions on logout."""
+    __tablename__ = "active_sessions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    jti = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=utcnow)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    ip_address = db.Column(db.String(64), default="")
 
 
 class ScanHistory(db.Model):

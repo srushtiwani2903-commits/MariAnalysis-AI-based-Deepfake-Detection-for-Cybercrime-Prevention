@@ -22,10 +22,13 @@ export default function FileUpload({
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef(null);
+  const onFileRef = useRef(onFile);
+  onFileRef.current = onFile;
 
   useEffect(() => {
-    if (!file || uploading) return;
-    // Simulated upload progress
+    if (!file) return;
+    // Simulated upload progress. Only keyed on `file`: including `uploading`
+    // here would make the re-render clear the interval and stall at 0%.
     setUploading(true);
     setProgress(0);
     const interval = setInterval(() => {
@@ -33,14 +36,14 @@ export default function FileUpload({
         if (p >= 100) {
           clearInterval(interval);
           setUploading(false);
-          onFile?.(file);
+          onFileRef.current?.(file);
           return 100;
         }
         return p + Math.random() * 14 + 6;
       });
     }, 180);
     return () => clearInterval(interval);
-  }, [file, uploading]);
+  }, [file]);
 
   const validate = (f) => {
     if (!f) return false;

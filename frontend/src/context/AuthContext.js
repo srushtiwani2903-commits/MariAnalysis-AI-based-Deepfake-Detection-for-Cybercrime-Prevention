@@ -1,12 +1,46 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import api from "../api/api";
 
 const AuthContext = createContext({});
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem("deepguard-token"));
   const [loading, setLoading] = useState(true);
+  const esRef = useRef(null);
+
+  const clearSession = () => {
+    closeSSE();
+    localStorage.removeItem("deepguard-token");
+    setToken(null);
+    setUser(null);
+  };
+
+  const closeSSE = () => {
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    const onUnauthorized = () => clearSession();
+    window.addEventListener("deepguard:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("deepguard:unauthorized", onUnauthorized);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    // Single-session: if this user logs in anywhere else, this tab is told to
+    // log out on the spot (no refresh needed).
+    const es = new EventSource(`${API_URL}/auth/events?token=${token}`);
+    esRef.current = es;
+    es.addEventListener("session_revoked", () => clearSession());
+    es.onerror = () => {};
+    return () => es.close();
+  }, [token]);
 
   useEffect(() => {
     if (!token) {
@@ -16,10 +50,7 @@ export function AuthProvider({ children }) {
     api
       .get("/auth/me")
       .then((res) => setUser(res.data.user))
-      .catch(() => {
-        localStorage.removeItem("deepguard-token");
-        setToken(null);
-      })
+      .catch(() => clearSession())
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -30,21 +61,25 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (identifier, password) => {
+    // Close this tab's stream first so re-login here doesn't kick itself.
+    closeSSE();
     const { data } = await api.post("/auth/login", { identifier, password });
     saveSession(data.token, data.user);
     return data;
   };
 
   const register = async (payload) => {
+    closeSSE();
     const { data } = await api.post("/auth/register", payload);
-    saveSession(data.token, data.user);
+    if (data.token) {
+      saveSession(data.token, data.user);
+    }
     return data;
   };
 
   const logout = () => {
-    localStorage.removeItem("deepguard-token");
-    setToken(null);
-    setUser(null);
+    api.post("/auth/logout").catch(() => {});
+    clearSession();
   };
 
   const refreshUser = async () => {

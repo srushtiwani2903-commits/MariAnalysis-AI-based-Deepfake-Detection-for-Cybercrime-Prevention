@@ -23,38 +23,65 @@ def check(name, ok, extra=""):
 r = client.get("/api/health")
 check("health", r.status_code == 200 and r.json.get("status") == "ok")
 
-# 2. Register
+# 2. Register - no OTP gate, account active + token issued immediately
+import time
+_suffix = str(int(time.time()))[-6:]
+_phone = f"+91999{_suffix}"
 r = client.post("/api/auth/register", json={
-    "username": "tester", "email": "tester@example.com",
-    "password": "Test@1234", "full_name": "Test User",
+    "username": f"tester{_suffix}", "email": f"tester{_suffix}@example.com",
+    "password": "Test@1234", "full_name": "Test User", "phone": _phone,
 })
-check("register", r.status_code == 201, r.json.get("message", ""))
+_username = f"tester{_suffix}"
+check("register", r.status_code == 201 and "token" in r.json and r.json["user"]["is_verified"] is True,
+      r.json.get("message", ""))
 token = r.json.get("token", "")
 headers = {"Authorization": f"Bearer {token}"}
 
 # 3. Duplicate register rejected
 r = client.post("/api/auth/register", json={
-    "username": "tester", "email": "tester@example.com", "password": "Test@1234",
+    "username": _username, "email": f"tester{_suffix}@example.com", "password": "Test@1234",
+    "phone": _phone,
 })
 check("register duplicate", r.status_code == 409)
 
-# 4. Login
-r = client.post("/api/auth/login", json={"identifier": "tester@example.com", "password": "Test@1234"})
-check("login", r.status_code == 200 and "token" in r.json)
+# 4. Second login with the same credentials KICKS the first session and
+#    issues a fresh token (single-session rule - no manual logout needed).
+r = client.post("/api/auth/login", json={"identifier": f"tester{_suffix}@example.com", "password": "Test@1234"})
+check("second login kicks old session", r.status_code == 200 and "token" in r.json)
+check("old token now revoked", client.get("/api/auth/me", headers=headers).status_code == 401)
+headers = {"Authorization": f"Bearer {r.json.get('token', '')}"}
 
 # 5. Bad login
-r = client.post("/api/auth/login", json={"identifier": "tester@example.com", "password": "wrong"})
+r = client.post("/api/auth/login", json={"identifier": f"tester{_suffix}@example.com", "password": "wrong"})
 check("login bad password", r.status_code == 401)
 
-# 6. Me
-r = client.get("/api/auth/me", headers=headers)
-check("me", r.status_code == 200 and r.json["user"]["username"] == "tester")
+# 6. Phone login while another session is active also kicks it (not blocked)
+r = client.post("/api/auth/login", json={"identifier": _phone, "password": "Test@1234"})
+check("phone login kicks old session", r.status_code == 200 and "token" in r.json)
+headers = {"Authorization": f"Bearer {r.json.get('token', '')}"}
 
-# 7. Weak password rejected
+# 7. Logout revokes the session, then login works again
+r = client.post("/api/auth/logout", headers=headers)
+check("logout", r.status_code == 200)
+r = client.post("/api/auth/login", json={"identifier": f"tester{_suffix}@example.com", "password": "Test@1234"})
+check("login after logout", r.status_code == 200 and "token" in r.json)
+headers = {"Authorization": f"Bearer {r.json.get('token', '')}"}
+
+# 8. Me
+r = client.get("/api/auth/me", headers=headers)
+check("me", r.status_code == 200 and r.json["user"]["username"] == _username)
+
+# 9. Weak password rejected
 r = client.post("/api/auth/register", json={
     "username": "x", "email": "x@y.com", "password": "short",
 })
 check("weak password rejected", r.status_code == 400)
+
+# 10. Register without phone is now allowed (phone optional)
+r = client.post("/api/auth/register", json={
+    "username": f"nophone{_suffix}", "email": f"nophone{_suffix}@y.com", "password": "Strong@1234",
+})
+check("register without phone ok", r.status_code == 201 and "token" in r.json)
 
 # 8. Image detection
 from PIL import Image
@@ -128,7 +155,8 @@ r = client.get("/api/history")
 check("auth required", r.status_code == 401)
 
 # 18. Admin endpoints (admin seeded from env default)
-r = client.post("/api/auth/login", json={"identifier": "admin@deepguard.local", "password": "Admin@12345"})
+r = client.post("/api/auth/login", json={"identifier": "admin@marianalysis.local", "password": "Admin@12345",
+                                         "force": True})
 admin_headers = {"Authorization": f"Bearer {r.json['token']}"} if r.status_code == 200 else {}
 check("admin login", r.status_code == 200)
 for path in ("/api/admin/stats", "/api/admin/users", "/api/admin/logs",

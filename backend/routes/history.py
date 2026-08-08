@@ -4,6 +4,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
 from models import Log, ScanHistory
+from utils.idps import audit
 
 history_bp = Blueprint("history", __name__)
 
@@ -83,4 +84,5 @@ def delete_scan(scan_id):
                        details=f"Deleted scan #{scan.id}", ip_address=request.remote_addr))
     db.session.delete(scan)
     db.session.commit()
+    audit("delete", user_id, "ScanHistory", scan_id, request.remote_addr, "Deleted scan")
     return jsonify({"message": "Scan deleted."})

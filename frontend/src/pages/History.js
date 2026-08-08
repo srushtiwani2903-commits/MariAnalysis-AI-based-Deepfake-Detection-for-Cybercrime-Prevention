@@ -59,7 +59,7 @@ export default function History() {
       .then((blob) => {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = `deepguard-report-${id}.${fmt}`;
+        a.download = `marianalysis-report-${id}.${fmt}`;
         a.click();
       })
       .catch(() => {});

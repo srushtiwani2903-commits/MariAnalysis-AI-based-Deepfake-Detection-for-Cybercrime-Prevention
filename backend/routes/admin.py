@@ -11,6 +11,7 @@ from functools import wraps
 from config import Config
 from extensions import db
 from models import AIPrediction, Log, Report, ScanHistory, User
+from utils.idps import audit
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -68,6 +69,7 @@ def delete_user(user_id):
         return jsonify({"message": "You cannot delete your own account."}), 400
     db.session.delete(target)
     db.session.commit()
+    audit("delete", get_jwt_identity(), "User", user_id, request.remote_addr, "Deleted user account")
     return jsonify({"message": "User deleted."})
 
 
@@ -81,6 +83,8 @@ def toggle_admin(user_id):
         return jsonify({"message": "You cannot change your own role."}), 400
     target.is_admin = not target.is_admin
     db.session.commit()
+    audit("update", get_jwt_identity(), "User", user_id, request.remote_addr,
+          f"Toggled admin role -> {target.is_admin}")
     return jsonify({"message": "Role updated.", "is_admin": target.is_admin})
 
 

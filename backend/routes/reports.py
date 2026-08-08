@@ -8,6 +8,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from config import Config
 from extensions import db
 from models import Log, Report, ScanHistory
+from utils.idps import audit
 from utils.report_generator import (generate_csv_report, generate_pdf_report,
                                     generate_qr_image)
 
@@ -33,12 +34,13 @@ def download_pdf(scan_id):
     if not report:
         db.session.add(Report(scan_id=scan.id, user_id=scan.user_id, format="pdf", file_path=path))
         db.session.commit()
+        audit("create", scan.user_id, "Report", scan.id, request.remote_addr, "PDF report generated")
     db.session.add(Log(user_id=scan.user_id, action="download_pdf",
                        details=f"PDF report for scan #{scan.id}",
                        ip_address=request.remote_addr))
     db.session.commit()
     return send_file(path, as_attachment=True,
-                     download_name=f"deepguard-report-{scan.id}.pdf",
+                     download_name=f"marianalysis-report-{scan.id}.pdf",
                      mimetype="application/pdf")
 
 
@@ -56,7 +58,7 @@ def download_csv(scan_id):
     return Response(
         csv_text,
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=deepguard-report-{scan.id}.csv"},
+        headers={"Content-Disposition": f"attachment; filename=marianalysis-report-{scan.id}.csv"},
     )
 
 

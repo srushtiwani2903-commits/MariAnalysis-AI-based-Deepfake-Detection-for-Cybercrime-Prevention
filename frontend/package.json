@@ -1,8 +1,8 @@
 {
-  "name": "deepguard-frontend",
+  "name": "marianalysis-frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "DeepGuard AI - AI-Based Deepfake Detection for Cybercrime Prevention (frontend)",
+  "description": "MariAnalysis - AI-Based Deepfake Detection for Cybercrime Prevention (frontend)",
   "dependencies": {
     "@heroicons/react": "^2.1.5",
     "axios": "^1.7.7",

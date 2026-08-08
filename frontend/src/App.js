@@ -10,7 +10,9 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
+import ScanHub from "./pages/ScanHub";
 import ImageDetection from "./pages/ImageDetection";
 import VideoDetection from "./pages/VideoDetection";
 import AudioDetection from "./pages/AudioDetection";
@@ -50,9 +52,11 @@ function AnimatedRoutes() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/detect" element={<ScanHub />} />
             <Route path="/detect/image" element={<ImageDetection />} />
             <Route path="/detect/video" element={<VideoDetection />} />
             <Route path="/detect/audio" element={<AudioDetection />} />

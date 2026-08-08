@@ -40,3 +40,38 @@ def human_size(num_bytes: int) -> str:
 
 def generate_reset_token():
     return secrets.token_urlsafe(48)
+
+
+def fetch_from_url(url: str, max_bytes: int = 50 * 1024 * 1024, timeout: int = 15):
+    """Download a URL into a BytesIO, enforcing size + timeout + redirect limits.
+
+    Returns (stream, size_bytes, content_type) or raises ValueError on failure.
+    """
+    import io
+    import urllib.parse
+    import urllib.request
+
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Only http/https URLs are allowed.")
+    if not parsed.hostname:
+        raise ValueError("Invalid URL.")
+
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "MariAnalysis/1.0", "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        content_type = resp.headers.get("Content-Type", "")
+        total = 0
+        buf = io.BytesIO()
+        while True:
+            chunk = resp.read(1024 * 256)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(f"Remote file exceeds the {max_bytes // (1024*1024)} MB limit.")
+            buf.write(chunk)
+        if total == 0:
+            raise ValueError("Remote URL returned an empty response.")
+        buf.seek(0)
+        return buf, total, content_type

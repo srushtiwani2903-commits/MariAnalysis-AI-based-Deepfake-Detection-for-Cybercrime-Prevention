@@ -11,18 +11,22 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
+  const doLogin = async () => {
     setError("");
     setLoading(true);
     try {
       const data = await login(form.identifier, form.password);
       navigate(data.user?.is_admin ? "/admin" : "/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.message || err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const onSubmit = (e) => {
+    e.preventDefault();
+    doLogin();
   };
 
   return (
@@ -53,7 +57,7 @@ export default function Login() {
 
         <form onSubmit={onSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium mb-1.5">Email or Username</label>
+            <label className="block text-sm font-medium mb-1.5">Email, Username or Phone</label>
             <div className="relative">
               <EnvelopeIcon className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -62,7 +66,7 @@ export default function Login() {
                 value={form.identifier}
                 onChange={(e) => setForm({ ...form, identifier: e.target.value })}
                 className="input !pl-11"
-                placeholder="you@example.com"
+                placeholder="you@example.com / username / +91 98765 43210"
               />
             </div>
           </div>

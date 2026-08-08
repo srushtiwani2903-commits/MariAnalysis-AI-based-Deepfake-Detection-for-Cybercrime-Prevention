@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ClockIcon, DocumentArrowDownIcon,
-  ScaleIcon, BeakerIcon, FingerPrintIcon, QrCodeIcon,
+  ScaleIcon, BeakerIcon, FingerPrintIcon, QrCodeIcon, ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import ResultBadge from "../components/ResultBadge";
 import ConfidenceBar from "../components/ConfidenceBar";
@@ -45,7 +45,7 @@ export default function Results() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `deepguard-report-${scanId}.${fmt}`;
+        a.download = `marianalysis-report-${scanId}.${fmt}`;
         a.click();
         URL.revokeObjectURL(url);
       })
@@ -102,6 +102,13 @@ export default function Results() {
               <span className="text-xs font-bold px-3 py-1.5 rounded-full glass flex items-center gap-1.5">
                 <BeakerIcon className="w-3.5 h-3.5" /> {full?.model?.model_name || scan.model || "ensemble-v1"}
               </span>
+              {(scan.scan_metadata?.reference_dataset || scan.reference_dataset) && (
+                <span title="Reference dataset used to back this scan"
+                  className="text-xs font-bold px-3 py-1.5 rounded-full glass flex items-center gap-1.5">
+                  <FingerPrintIcon className="w-3.5 h-3.5 text-neon-purple" />
+                  Kaggle: {String(scan.scan_metadata?.reference_dataset || scan.reference_dataset).split("/")[0]}
+                </span>
+              )}
             </div>
           </div>
 
@@ -159,16 +166,45 @@ export default function Results() {
         </GlassCard>
 
         <GlassCard>
-          <h2 className="font-bold mb-3">Recommended Actions</h2>
+          <h2 className="font-bold mb-3 flex items-center gap-2">
+            <ShieldCheckIcon className="w-5 h-5 text-emerald-400" /> Recommended Actions
+          </h2>
           <ul className="space-y-2.5">
             {(scan.recommendations || "").split("\n").filter(Boolean).map((r, i) => (
               <li key={i} className="text-sm text-slate-600 dark:text-slate-300 flex gap-2">
-                <span className="text-neon-blue font-bold">▸</span> {r}
+                <span className="text-emerald-400 font-bold">▸</span> {r}
               </li>
             ))}
           </ul>
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400">
+            Download the forensic PDF / QR report to share this verification and warn others.
+          </div>
         </GlassCard>
       </div>
+
+      {/* Prevention center */}
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+        className="glass-strong rounded-3xl p-6 sm:p-8">
+        <h2 className="font-bold mb-1 flex items-center gap-2">
+          <ShieldCheckIcon className="w-6 h-6 text-emerald-400" /> Prevention Guidance
+        </h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">
+          Protecting yourself against {scan.scan_type} deepfakes — act on these steps.
+        </p>
+        <div className="grid sm:grid-cols-3 gap-4 text-sm">
+          {[
+            ["Verify the source", "Confirm the sender through a second channel before trusting or forwarding."],
+            ["Don't share / repost", "Spreading a detected fake amplifies harm — report it instead."],
+            ["Backup evidence", "Save this forensic report as your record for authorities/platforms."],
+          ].map(([t, d], i) => (
+            <div key={t} className="rounded-2xl bg-white/40 dark:bg-white/5 p-4">
+              <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 text-white font-bold text-xs mb-2">{i + 1}</span>
+              <p className="font-semibold text-emerald-600 dark:text-emerald-400">{t}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{d}</p>
+            </div>
+          ))}
+        </div>
+      </motion.div>
 
       {/* Suspicious sections for text / video timeline */}
       {sections.length > 0 && (

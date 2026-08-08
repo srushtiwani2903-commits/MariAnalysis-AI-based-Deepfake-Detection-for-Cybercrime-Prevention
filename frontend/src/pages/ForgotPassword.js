@@ -7,6 +7,7 @@ import api from "../api/api";
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [debugLink, setDebugLink] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -14,12 +15,14 @@ export default function ForgotPassword() {
     e.preventDefault();
     setError("");
     setMessage("");
+    setDebugLink("");
     setLoading(true);
     try {
       const { data } = await api.post("/auth/forgot-password", { email });
       setMessage(data.message || "If that email exists, a reset link was sent.");
+      if (data.debug_link) setDebugLink(data.debug_link);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.message || err.message);
     } finally {
       setLoading(false);
     }
@@ -39,7 +42,7 @@ export default function ForgotPassword() {
           </span>
           <h1 className="text-2xl font-bold">Reset Password</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Enter your email and we'll send a reset link
+            Enter your registered email — we'll send you a reset link
           </p>
         </div>
 
@@ -53,6 +56,15 @@ export default function ForgotPassword() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="flex items-center gap-2 text-emerald-400 text-sm bg-emerald-400/10 border border-emerald-400/30 rounded-xl px-4 py-3 mb-5">
             <PaperAirplaneIcon className="w-5 h-5 shrink-0" /> {message}
+          </motion.div>
+        )}
+        {debugLink && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="mb-5 rounded-xl bg-neon-blue/10 border border-neon-blue/30 px-4 py-3">
+            <p className="text-xs font-semibold text-neon-blue mb-1">
+              Mail service is off (dev mode) — use this link:
+            </p>
+            <a href={debugLink} className="text-xs text-neon-blue underline break-all">{debugLink}</a>
           </motion.div>
         )}
 

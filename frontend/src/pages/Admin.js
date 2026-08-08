@@ -85,7 +85,7 @@ export default function Admin() {
             : "border-amber-400/30 bg-amber-400/10 text-amber-300"}`}>
           <span className="font-bold">SYSTEM {health.status.toUpperCase()}</span>
           <span>DB: {health.database}</span>
-          <span>Engine: {health.model_enabled ? "trained-models" : "heuristic-v1"}</span>
+          <span>Engine: heuristic-ensemble-v1</span>
           <span>Storage free: {(health.storage_free_bytes / 1e9).toFixed(1)} GB</span>
           <span>Uptime: {Math.floor(health.uptime_seconds / 60)} min</span>
         </div>

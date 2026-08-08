@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheckIcon,
   SunIcon,
   MoonIcon,
   UserIcon,
@@ -11,10 +10,6 @@ import {
   XMarkIcon,
   ChartBarIcon,
   ClockIcon,
-  BookOpenIcon,
-  InformationCircleIcon,
-  EnvelopeIcon,
-  Cog6ToothIcon,
   BeakerIcon,
   ShieldExclamationIcon,
 } from "@heroicons/react/24/outline";
@@ -23,14 +18,9 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 
 const navLinks = [
-  { to: "/", labelKey: "home", icon: ShieldCheckIcon },
   { to: "/dashboard", labelKey: "dashboard", icon: ChartBarIcon, protected: true },
-  { to: "/detect/image", label: "Image", icon: BeakerIcon, protected: true },
+  { to: "/detect", label: "Scan", icon: BeakerIcon, protected: true },
   { to: "/history", labelKey: "history", icon: ClockIcon, protected: true },
-  { to: "/analytics", labelKey: "analytics", icon: ChartBarIcon, protected: true },
-  { to: "/learning", labelKey: "learning", icon: BookOpenIcon },
-  { to: "/about", labelKey: "about", icon: InformationCircleIcon },
-  { to: "/contact", labelKey: "contact", icon: EnvelopeIcon },
 ];
 
 export default function Navbar() {
@@ -60,7 +50,7 @@ export default function Navbar() {
             <ShieldExclamationIcon className="w-5 h-5" />
           </span>
           <span className="font-bold text-lg tracking-tight">
-            Deep<span className="neon-text">Guard</span> AI
+            Mari<span className="neon-text">Analysis</span>
           </span>
         </Link>
 
@@ -116,12 +106,6 @@ export default function Navbar() {
                           className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/10">
                       <UserIcon className="w-4 h-4" /> Profile
                     </Link>
-                    {user?.is_admin && (
-                      <Link to="/admin" onClick={() => setUserMenu(false)}
-                            className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/10">
-                        <Cog6ToothIcon className="w-4 h-4" /> Admin Panel
-                      </Link>
-                    )}
                     <button onClick={handleLogout}
                             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-rose-400 hover:bg-rose-500/10">
                       <ArrowRightOnRectangleIcon className="w-4 h-4" /> {t("logout")}

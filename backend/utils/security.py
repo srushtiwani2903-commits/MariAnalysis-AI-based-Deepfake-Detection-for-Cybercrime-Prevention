@@ -47,10 +47,9 @@ _IMAGE_MAGIC = {
     b"\xff\xd8\xff": "jpg",                    # JPEG
     b"\x89PNG\r\n\x1a\n": "png",               # PNG
     b"GIF87a": "gif", b"GIF89a": "gif",        # GIF
-    b"RIFF": "webp",                            # WEBP container
 }
 _VIDEO_MAGIC = {b"\x00\x00\x00\x18ftyp": "mp4", b"\x1aE\xdf\xa3": "mkv"}
-_AUDIO_MAGIC = {b"ID3": "mp3", b"\xff\xfb": "mp3", b"OggS": "ogg"}
+_AUDIO_MAGIC = {b"ID3": "mp3", b"\xff\xfb": "mp3", b"OggS": "ogg", b"fLaC": "flac"}
 
 
 def sanitize_filename(filename: str) -> str:
@@ -66,7 +65,14 @@ def allowed_extension(filename: str, allowed_exts: set) -> bool:
 
 def sniff_matches_magic(extension: str, head: bytes) -> bool:
     """Best-effort magic-byte check. Returns True when the extension matches file content."""
-    ext = extension.lower().lstrip(".")
+    ext = Path(extension).suffix.lower().lstrip(".") or extension.lower().lstrip(".")
+    # RIFF is a container: WEBP (image) vs WAVE (audio), distinguished at bytes 8:12.
+    if head[:4] == b"RIFF":
+        if head[8:12] == b"WEBP":
+            return ext == "webp"
+        if head[8:12] == b"WAVE":
+            return ext == "wav"
+        return ext in {"webp", "wav"}
     table = {**_IMAGE_MAGIC, **_VIDEO_MAGIC, **_AUDIO_MAGIC}
     for magic, magic_ext in table.items():
         if head.startswith(magic):
@@ -100,6 +106,10 @@ def validate_upload(file_storage, allowed_exts: set, max_bytes: int):
     file_storage.stream.seek(0)
     if size == 0:
         return False, "Empty file uploaded.", 0
+
+    # Magic-byte sniffing: reject files whose content contradicts their extension.
+    if head and not sniff_matches_magic(filename, head):
+        return False, "File content does not match its extension.", size
     return True, "", size
 
 

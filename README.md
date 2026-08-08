@@ -1,13 +1,15 @@
-# DeepGuard AI — AI-Based Deepfake Detection for Cybercrime Prevention
+# MariAnalysis — AI-Based Deepfake Detection for Cybercrime Prevention
 
 A production-grade, full-stack cybersecurity platform that detects AI-generated /
 manipulated content across **images, videos, audio, and text**. It returns
 confidence scores, explainable (XAI) verdicts, forensic PDF/CSV reports, and a
 learning center for deepfake awareness.
 
-> **Runs out of the box with smart heuristic "dummy" AI predictions**, so the
-> entire product works without a trained model. A pluggable interface lets you
-> swap in real CNN / ViT / Transformer models later without touching the API or UI.
+> **Runs out of the box with smart heuristic AI predictions** (no model weights).
+> Deepfake analysis runs on deterministic, explainable heuristic engines for
+> images, video, audio and text. Model *training* code has been removed; the
+> Kaggle subsystem exists purely as an on-demand dataset fetch/extract/use
+> pipeline and never persists data in the project.
 
 ---
 
@@ -21,13 +23,18 @@ learning center for deepfake awareness.
   - Video — frame extraction, MediaPipe/Haar face detection, temporal analysis, timeline
   - Audio — Librosa spectrogram, spectral flatness, MFCC variance, voice-clone checks
   - Text — perplexity, burstiness, repetition + suspicious sentence highlighting
+- **URL scanning** — paste a link to a media file and the backend fetches + analyzes it
+  (`POST /api/detect/url`), no manual download needed
+- **Automated Kaggle data pipeline** — deepfake datasets are fetched **directly from
+  Kaggle on-demand**, extracted to a temp cache, used, then the temp cache is
+  auto-deleted. Nothing is stored in the project. No model training is performed.
 - **Results page** — Authentic/Fake badge, confidence meter, risk level, XAI explanation, feature importances, recommendations, PDF/CSV/QR downloads
 - **History** — search, filter by type/result, paginate, delete, re-download
 - **Analytics** — Chart.js dashboards: daily, weekly, fake-vs-real, by-type, accuracy trend
 - **Admin panel** — system stats, user management, logs, model performance, health
 - **Learning Center, About, Contact, API Docs** pages
 - **Dark/Light mode** with neon-blue cybersecurity theme and glassmorphism
-- **Security** — rate limiting, file validation (extension + magic bytes + size), JWT, sanitized inputs, parameterized SQL, XSS-safe rendering
+- **Security** — rate limiting, **IDPS (fail2ban-style IP lockout + intrusion/audit logs)**, file validation (extension + magic bytes + size), JWT, PBKDF2 password hashing, sanitized inputs, parameterized SQL, XSS-safe rendering, security headers (CSP, X-Frame-Options, nosniff)
 - **Extras** — drag & drop upload, live progress, scan animations, voice assistant (Web Speech API), multi-language UI (EN/ES/HI/FR), QR report, CSV export
 
 ---
@@ -38,7 +45,7 @@ learning center for deepfake awareness.
 |----------|--------------|
 | Frontend | React 18, Tailwind CSS 3, Framer Motion, React Router 6, Chart.js, Heroicons, Axios |
 | Backend  | Python Flask 3, Flask-JWT-Extended, Flask-SQLAlchemy, Flask-CORS, ReportLab, Pillow, QRCode |
-| AI (optional) | OpenCV, MediaPipe, Librosa, HuggingFace Transformers, PyTorch |
+| AI (heuristic) | OpenCV, MediaPipe, Librosa |
 | Database | SQLite (default) / MySQL |
 | Deploy   | Vercel / Netlify (FE), Render / Railway (BE) |
 
@@ -58,6 +65,9 @@ deepfake-detection/
 │   ├── requirements-ai.txt       # Optional AI/model dependencies
 │   ├── smoke_test.py             # End-to-end API test (34 checks)
 │   ├── .env.example              # Environment variables template
+│   ├── ml/                       # Kaggle data subsystem (no model training)
+│   │   ├── data_config.py        # Dataset registry (Kaggle slugs per media type)
+│   │   ├── kaggle_pipeline.py    # On-demand Kaggle fetch (temp cache, auto-clean)
 │   ├── routes/
 │   │   ├── auth.py               # /api/auth/*        (register, login, profile)
 │   │   ├── detection.py          # /api/detect/*      (image, video, audio, text)
@@ -66,18 +76,19 @@ deepfake-detection/
 │   │   ├── reports.py            # /api/reports/*     (pdf, csv, qr)
 │   │   └── admin.py              # /api/admin/*       (users, logs, health)
 │   ├── services/
-│   │   ├── ai_service.py         # Orchestrator + real-model plug points
+│   │   ├── ai_service.py         # Orchestrator (heuristic engines)
 │   │   ├── analyze_image.py      # ELA + metadata heuristics
 │   │   ├── analyze_video.py      # frame + face + temporal heuristics
 │   │   ├── analyze_audio.py      # spectral / MFCC heuristics
 │   │   └── analyze_text.py       # perplexity / burstiness heuristics
 │   ├── utils/
 │   │   ├── security.py           # rate limiter, file validation, sanitizers
+│   │   ├── idps.py               # intrusion detection & prevention (IP lockout, audit trail)
 │   │   ├── helpers.py            # uploads, timestamps
 │   │   └── report_generator.py   # PDF / CSV / QR generation
+│   ├── security/logs/            # intrusion + audit JSONL trails (append-only)
 │   ├── uploads/                  # Uploaded media (auto-created)
-│   ├── reports/                  # Generated reports (auto-created)
-│   └── models/weights/           # Drop trained weights here for real inference
+│   └── reports/                  # Generated reports (auto-created)
 │
 └── frontend/                     # React SPA
     ├── package.json
@@ -112,7 +123,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt          # core (heuristic mode works immediately)
-# optional, only if you want real model inference:
+# optional, enables deeper forensic analysis + Kaggle data fetch:
 pip install -r requirements-ai.txt
 
 copy .env.example .env                   # Windows
@@ -122,7 +133,7 @@ python run.py                            # starts on http://localhost:5000
 ```
 
 The first run auto-creates the SQLite database and a default admin account
-(configured in `.env`, default `admin@deepguard.local` / `Admin@12345`).
+(configured in `.env`, default `admin@marianalysis.local` / `Admin@12345`).
 
 ### 2) Frontend
 
@@ -155,6 +166,7 @@ Base URL: `http://localhost:5000/api` — all protected endpoints require
 | POST   | `/detect/video`                | Upload video → verdict               |
 | POST   | `/detect/audio`                | Upload audio → verdict               |
 | POST   | `/detect/text`                 | Submit text → verdict                |
+| POST   | `/detect/url`                  | Analyze media from a remote URL      |
 | GET    | `/history`                     | List scans (q/type/result/page)      |
 | GET    | `/history/stats`               | Dashboard summary                    |
 | GET    | `/history/<id>`                | Scan detail (with XAI payload)       |
@@ -176,22 +188,51 @@ Interactive API docs are also rendered in the app at `/docs`.
 
 ---
 
-## 🧠 Integrating a Real Trained Model
+## 🧠 Deepfake Analysis & the Kaggle Data Pipeline
 
-The app ships with a deterministic heuristic engine so the full pipeline works
-with zero model weights. To use real models:
+The app ships with deterministic heuristic engines so the full pipeline works
+out of the box with zero model weights. Model *training* was intentionally
+removed — the Kaggle subsystem is used only to fetch/extract/use datasets
+on-demand for research and validation.
 
-1. Train / download weights (e.g., FaceForensics++, DFDC, ASVspoof) into
-   `backend/models/weights/`.
-2. Set `MODEL_ENABLED=true` in `.env`.
-3. Implement the `predict_image_real / predict_video_real / predict_audio_real`
-   methods in `backend/services/ai_service.py` (`_load_real_models()` is the
-   weight-loading hook). Text detection already supports HuggingFace
-   `roberta-base-openai-detector` when `MODEL_ENABLED=true`.
-4. Restart the backend. The API response schema is unchanged, so the frontend
-   needs zero modifications.
+### 1) Configure Kaggle credentials (once)
 
-### How the heuristic engines work
+Get an API key at https://www.kaggle.com/settings → API, then add to `backend/.env`:
+
+```bash
+KAGGLE_USERNAME=your-username
+KAGGLE_KEY=your-40-char-key
+```
+
+The pipeline writes these to `~/.kaggle/kaggle.json` automatically — no manual
+re-authentication, ever.
+
+### 2) Fetch a dataset on-demand (auto-cleaned afterwards)
+
+```bash
+cd backend
+pip install -r requirements.txt -r requirements-ai.txt
+
+python -m ml.kaggle_pipeline --image    # download + extract image dataset to temp cache
+python -m ml.kaggle_pipeline --list     # show configured datasets
+```
+
+Each `--kaggle` fetch downloads the dataset **directly from Kaggle into a temp
+cache, extracts it, is used, then the cache is deleted** — nothing is stored in
+the project. Set `KAGGLE_AUTOSYNC=true` to auto-sync datasets at backend startup.
+
+### Available datasets (configurable in `ml/data_config.py`)
+
+| Media | Kaggle dataset |
+|-------|----------------|
+| image | `ciplab/real-and-fake-face-detection` |
+| video | `unidpro/deepfake-videos-dataset` |
+| audio | `adarshsingh0903/audio-deepfake-detection-dataset` |
+| text  | `alitaqishah/ai-vs-human-text-classification-dataset-2026` |
+
+Add your own via `KAGGLE_EXTRA_DATASETS=user/dataset1,user/dataset2` in `.env`.
+
+### How the heuristic engines work (no model weights needed)
 
 - **Image**: Error Level Analysis (recompression artifacts), pHash-based
   similarity, color/texture statistics, EXIF forensics.
@@ -200,7 +241,7 @@ with zero model weights. To use real models:
 - **Audio**: spectral flatness, zero-crossing rate, MFCC variance (librosa);
   RIFF header fallback.
 - **Text**: n-gram perplexity proxy, sentence-length burstiness, repetition
-  ratio; optional HuggingFace RoBERTa detector.
+  ratio.
 
 ---
 
@@ -224,16 +265,37 @@ requirements.txt).
 
 - **Passwords**: PBKDF2 via `werkzeug.security` — never stored in plain text.
 - **Auth**: short-lived JWT access tokens (no cookies ⇒ no CSRF surface).
+- **IDPS (Intrusion Detection & Prevention)**: fail2ban-style per-IP lockout —
+  5 failed logins in a window auto-bans the IP; bans + every data
+  create/update/delete are written to the DB `logs` table **and** append-only
+  JSONL trails in `backend/security/logs/` (intrusions.jsonl, audit.jsonl).
 - **SQL Injection**: all queries are parameterized through SQLAlchemy.
 - **XSS**: API returns data only; React escapes all dynamic output.
 - **Uploads**: extension whitelist + magic-byte sniffing + size cap; files are
-  random-renamed to prevent path traversal.
+  random-renamed to prevent path traversal. Files whose content contradicts their
+  extension are rejected.
+- **URL scans**: http/https only, strict redirect + size + timeout limits.
+- **Headers**: CSP, X-Frame-Options DENY, nosniff, no-referrer, Permissions-Policy
+  and no-store cache control are set on every response.
 - **Rate limiting**: in-memory sliding window per user/IP on auth + detect routes.
-- **Input sanitization**: control characters stripped, length caps enforced.
+- **Input sanitization**: control characters stripped, length caps enforced on
+  every write (auto-secured on create/edit/delete).
 
 ---
 
 ## ☁️ Deployment
+
+### Docker (backend + frontend)
+
+```bash
+# build backend with AI deps included
+docker compose build --build-arg INSTALL_AI_DEPS=1
+docker compose up -d
+# backend  -> http://localhost:5000
+# frontend -> http://localhost:3000
+```
+
+Persistent volumes keep the SQLite DB and security/audit logs across restarts.
 
 ### Frontend → Vercel / Netlify
 
@@ -254,13 +316,12 @@ gunicorn -w 4 -b 0.0.0.0:$PORT app:app
 ```
 
 Set env vars: `SECRET_KEY`, `JWT_SECRET_KEY`, `DATABASE_URL`,
-`CORS_ORIGINS=https://<frontend>.vercel.app`, `MODEL_ENABLED=false`.
+`CORS_ORIGINS=https://<frontend>.vercel.app`.
 
-### Database & AI model hosting
+### Database hosting
 
 - Database: use a managed MySQL (Render/Railway) or SQLite on a persistent disk.
-- AI model hosting: run inference on a GPU instance (or keep `MODEL_ENABLED=false`
-  for the heuristic engine which is CPU-only).
+- The heuristic engine is CPU-only — no GPU or model hosting required.
 
 ---
 

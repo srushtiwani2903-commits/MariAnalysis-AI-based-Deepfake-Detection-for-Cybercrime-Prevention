@@ -103,7 +103,7 @@ def _hash_drift(file_path):
     return diffs / max_diff  # 0..1
 
 
-def analyze_video(file_path, filename, size_bytes, model_enabled=False):
+def analyze_video(file_path, filename, size_bytes):
     start = time.time()
     info = _probe_video(file_path)
     frames = _extract_frames(file_path)
@@ -162,7 +162,7 @@ def analyze_video(file_path, filename, size_bytes, model_enabled=False):
         "metadata": info,
         "features": features,
         "suspicious_sections": timeline,
-        "model": "temporal-CNN-v1" if not model_enabled else "ViT-temporal-ensemble",
+        "model": "temporal-CNN-v1",
     }
 
 

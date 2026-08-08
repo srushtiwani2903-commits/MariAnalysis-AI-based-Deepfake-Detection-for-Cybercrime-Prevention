@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   UserIcon, EnvelopeIcon, LockClosedIcon, ExclamationTriangleIcon,
-  ShieldCheckIcon, CheckCircleIcon,
+  ShieldCheckIcon, CheckCircleIcon, PhoneIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "../context/AuthContext";
 
@@ -17,7 +17,7 @@ const passwordRules = [
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: "", full_name: "", email: "", password: "", confirm: "" });
+  const [form, setForm] = useState({ username: "", full_name: "", email: "", password: "", confirm: "", phone: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -30,10 +30,10 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await register({ username: form.username, full_name: form.full_name, email: form.email, password: form.password });
+      const data = await register({ username: form.username, full_name: form.full_name, email: form.email, password: form.password, phone: form.phone });
       navigate("/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.message || err.message);
     } finally {
       setLoading(false);
     }
@@ -52,7 +52,7 @@ export default function Register() {
             <ShieldCheckIcon className="w-8 h-8" />
           </span>
           <h1 className="text-2xl font-bold">Create Account</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Join DeepGuard AI security platform</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Join MariAnalysis security platform</p>
         </div>
 
         {error && (
@@ -101,6 +101,19 @@ export default function Register() {
                 className="input !pl-11" placeholder="you@example.com"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Mobile Number <span className="text-slate-400 font-normal">(optional — for phone login)</span></label>
+            <div className="relative">
+              <PhoneIcon className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="tel" value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="input !pl-11" placeholder="+91 98765 43210"
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Add a mobile number to log in with it.</p>
           </div>
 
           <div>

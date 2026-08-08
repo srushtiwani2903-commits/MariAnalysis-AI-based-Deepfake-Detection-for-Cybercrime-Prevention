@@ -101,7 +101,7 @@ export default function Home() {
               transition={{ delay: 0.2 }}
               className="mt-6 text-lg text-slate-600 dark:text-slate-300"
             >
-              DeepGuard AI uses deep learning to expose AI-generated images, cloned
+              MariAnalysis uses deep learning to expose AI-generated images, cloned
               voices, manipulated video and machine-written text — protecting
               individuals and organizations from cybercrime.
             </motion.p>
@@ -127,7 +127,7 @@ export default function Home() {
               transition={{ delay: 0.5 }}
               className="mt-6 font-mono text-xs text-slate-400 dark:text-slate-500 terminal-cursor"
             >
-              $ deepguard scan --media image --model ensemble --explain yes
+              $ marianalysis scan --media image --model ensemble --explain yes
             </motion.p>
           </div>
 
@@ -144,7 +144,7 @@ export default function Home() {
                 <span className="w-3 h-3 rounded-full bg-rose-400" />
                 <span className="w-3 h-3 rounded-full bg-amber-400" />
                 <span className="w-3 h-3 rounded-full bg-emerald-400" />
-                <span className="ml-3 font-mono text-xs text-slate-400">deepguard-console</span>
+                <span className="ml-3 font-mono text-xs text-slate-400">marianalysis-console</span>
               </div>
 
               <div className="space-y-4 font-mono text-xs">

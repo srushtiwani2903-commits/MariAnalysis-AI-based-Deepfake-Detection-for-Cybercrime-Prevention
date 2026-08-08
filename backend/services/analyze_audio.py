@@ -56,7 +56,7 @@ def _librosa_features(path):
         return {}, False
 
 
-def analyze_audio(file_path, filename, size_bytes, model_enabled=False):
+def analyze_audio(file_path, filename, size_bytes):
     start = time.time()
     header = _read_wav_header(file_path)
     lib_features, has_librosa = _librosa_features(file_path)
@@ -96,7 +96,7 @@ def analyze_audio(file_path, filename, size_bytes, model_enabled=False):
         "processing_time_ms": elapsed,
         "metadata": features,
         "features": features,
-        "model": "spectral-CNN-v1" if not model_enabled else "voice-clone-transformer",
+        "model": "spectral-CNN-v1",
         "spectrogram_available": has_librosa,
     }
 

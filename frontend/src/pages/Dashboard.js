@@ -61,8 +61,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex gap-3">
-            <Link to="/analytics" className="btn-secondary">Analytics</Link>
-            <Link to="/detect/image" className="btn-primary">
+            <Link to="/detect" className="btn-primary">
               <DocumentMagnifyingGlassIcon className="w-5 h-5" /> New Scan
             </Link>
           </div>
@@ -116,7 +115,7 @@ export default function Dashboard() {
         {recent.length === 0 ? (
           <GlassCard hover={false} className="text-center py-12">
             <p className="text-slate-400 mb-3">No scans yet. Run your first deepfake analysis.</p>
-            <Link to="/detect/image" className="btn-primary">Start First Scan</Link>
+            <Link to="/detect" className="btn-primary">Start First Scan</Link>
           </GlassCard>
         ) : (
           <div className="space-y-3">

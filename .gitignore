@@ -24,12 +24,14 @@ __pycache__/
 *.key
 
 # ---------- Runtime data ----------
+backend/instance/
 backend/deepfake.db
 backend/uploads/*
 backend/reports/*
 !backend/uploads/.gitkeep
 !backend/reports/.gitkeep
-backend/models/weights/*
+backend/security/logs/*
+backend/ml/*.json
 
 # ---------- Logs / OS ----------
 *.log
