@@ -18,8 +18,8 @@ export default function Footer() {
             <span className="font-bold">Mari<span className="neon-text">Analysis</span></span>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            AI-powered deepfake detection platform fighting cybercrime by exposing
-            manipulated images, videos, audio and text.
+            Helps you check images, videos, audio and text for signs of being
+            AI-generated or manipulated — before you trust them.
           </p>
         </div>
 
@@ -60,7 +60,7 @@ export default function Footer() {
       </div>
       <div className="border-t border-slate-200 dark:border-white/10 py-4">
         <p className="text-center text-xs text-slate-500 dark:text-slate-500">
-          © {new Date().getFullYear()} MariAnalysis · AI-Based Deepfake Detection for Cybercrime Prevention · Made with security in mind
+          © {new Date().getFullYear()} MariAnalysis · Built to help you spot the fakes
         </p>
       </div>
     </footer>

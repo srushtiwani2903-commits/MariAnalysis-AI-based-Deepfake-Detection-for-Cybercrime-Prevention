@@ -93,8 +93,8 @@ def analyze_email(text, filename="email-input.txt"):
 
 
 def _interpret(prob):
-    # Phishing thresholds are lower than media ones: scam emails are cheap to
-    # flag for review, so a false-positive is harmless but a miss is costly.
+    # Lower thresholds than media: flagging a legit email for review is cheap,
+    # missing a scam is not.
     if prob >= 55:
         return "fake", "high"
     if prob >= 38:

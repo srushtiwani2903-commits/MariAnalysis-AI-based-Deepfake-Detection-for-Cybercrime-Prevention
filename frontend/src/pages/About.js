@@ -6,16 +6,16 @@ import {
 
 const objectives = [
   "Detect AI-generated and manipulated media across image, video, audio and text.",
-  "Provide confidence scores and explainable (XAI) reasoning behind every verdict.",
-  "Educate users about deepfake threats and how to protect themselves.",
-  "Offer forensic-grade downloadable reports for cybercrime reporting.",
+  "Give a clear confidence score and explain why each verdict was reached.",
+  "Help people learn about deepfakes and how to protect themselves.",
+  "Provide downloadable reports you can keep for your records.",
 ];
 
 const methodology = [
-  ["Problem Statement", "Deepfake technology is weaponized for fraud, defamation, misinformation and identity theft. Traditional verification fails because synthetic media is visually indistinguishable from reality."],
-  ["Objective", "Build an enterprise-grade platform that uses deep learning to flag synthetic content with high confidence and clear explanations."],
-  ["Approach", "Multi-modal detection: CNN + Vision Transformers for images/video, spectral analysis for audio, and NLP perplexity/burstiness for text — unified behind a single REST API."],
-  ["Verification", "Heuristic ensemble provides immediate predictions; a pluggable interface allows swapping in trained models (FaceForensics++, DFDC, ASVspoof) without changing the product."],
+  ["Problem Statement", "Deepfakes get used for fraud, defamation, misinformation and identity theft. The tricky part is that a well-made fake can look identical to a real photo or video to the naked eye."],
+  ["Objective", "Build a platform that flags synthetic content clearly, with a confidence score and an explanation people can understand."],
+  ["Approach", "Check media using several methods together: computer vision for images/videos, spectral analysis for audio, and language patterns for text — all behind one simple API."],
+  ["Verification", "A heuristic ensemble gives immediate results out of the box, and trained models can be swapped in later (FaceForensics++, DFDC, ASVspoof) without changing the product."],
 ];
 
 const workflow = [
@@ -51,8 +51,8 @@ export default function About() {
         </span>
         <h1 className="text-3xl sm:text-4xl font-bold">About the Project</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3">
-          AI-Based Deepfake Detection for Cybercrime Prevention — a senior-project
-          grade, production-ready cybersecurity platform.
+          A senior-project platform for detecting AI-generated media and preventing
+          the cybercrime that relies on it.
         </p>
       </div>
 

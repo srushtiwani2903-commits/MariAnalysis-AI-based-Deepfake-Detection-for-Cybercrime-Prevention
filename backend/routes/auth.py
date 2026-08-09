@@ -1,9 +1,7 @@
-"""Authentication endpoints: register, login, forgot/reset password, profile.
+"""Authentication endpoints: register, login, password reset, profile.
 
-Security:
-  - Passwords hashed with werkzeug (PBKDF2) - never stored in plain text.
-  - JWT access tokens (flask-jwt-extended) with expiry.
-  - Email regex validation, password strength rules, rate limiting.
+Passwords are hashed with werkzeug, sessions use expiring JWTs, and inputs are
+validated (email regex, password strength) and rate-limited.
 """
 import queue
 import re
@@ -92,8 +90,8 @@ def _issue_session(user):
     return create_access_token(identity=str(user.id), additional_claims={"jti": jti})
 
 
-# --- In-memory pub/sub so other devices are logged out the instant this
-# user signs in somewhere else (Server-Sent Events). ---
+# In-memory pub/sub: tells other devices to log out the instant this user
+# signs in elsewhere (Server-Sent Events).
 _EVENTS = {}            # user_id -> set[queue.Queue]
 _EVENTS_LOCK = threading.Lock()
 
@@ -231,9 +229,9 @@ def login():
     # OTP/email verification gate is removed for now - any registered account
     # can log in (by email, username or phone) immediately.
 
-    # Single-session rule: this login becomes the ONLY active session. Every
-    # other active session is revoked on the spot and those devices are told
-    # (via SSE) to log out immediately - no refresh or manual logout needed.
+    # Single-session rule: this login is the only active session. Any other
+    # active session is revoked immediately and those devices are told via SSE
+    # to log out on the spot - no refresh or manual logout needed.
     if _active_sessions(user.id):
         ActiveSession.query.filter_by(user_id=user.id, is_active=True).update(
             {"is_active": False, "revoked_reason": "superseded"})

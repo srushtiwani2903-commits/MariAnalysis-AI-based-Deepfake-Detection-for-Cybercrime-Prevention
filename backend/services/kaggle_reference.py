@@ -1,19 +1,14 @@
-"""Kaggle reference comparison for the live/deepfake scan.
+"""Reference comparison for the deepfake scan.
 
-Pulls a small sample of real + fake images DIRECTLY from Kaggle into a temp
-cache (auto-deleted), computes the same heuristic feature vectors the image
-analyzer uses, builds per-class (real vs fake) distributions, and scores any
-newly scanned image against them. Nothing is persisted in the project - the
-raw dataset lives only in a temp folder for the few seconds it takes to build
-the in-process profile, then is deleted.
-
-The profile is built once (lazily on the first scan) and cached in-process, so
-a live webcam stream or repeated URL scans never re-download anything.
+On first use it pulls a small sample of real + fake images from Kaggle into a
+temp dir (auto-deleted), builds per-class feature distributions, and scores
+later scans against them. The profile is cached in-process, so webcam and URL
+scans never re-download.
 
 Usage:
     from services.kaggle_reference import kaggle_reference
-    kaggle_reference.ensure_built()          # trigger background build
-    ref = kaggle_reference.score(features)   # dict or None
+    kaggle_reference.ensure_built()        # kick off a background build
+    ref = kaggle_reference.score(features) # dict or None
 """
 import logging
 import os
@@ -85,8 +80,8 @@ class KaggleReference:
                 if value is None or std <= 1e-9:
                     continue
                 terms.append(((value - mean) / std) ** 2)
-            # RMS z-distance: averaged per feature, so no single feature with a
-            # tiny std dominates the comparison.
+            # RMS z-distance averaged per feature, so no single low-std
+            # feature dominates the comparison.
             dists[cls] = (sum(terms) / len(terms)) ** 0.5 if terms else 0.0
         if len(dists) < 2 or sum(dists.values()) <= 0:
             return None
@@ -198,8 +193,8 @@ def _temp_reference_media(slug, n):
             name = getattr(f, "name", "") or ""
             low = os.path.basename(name).lower()
             folder = os.path.basename(os.path.dirname(name)).lower()
-            # Classify by the parent folder (e.g. training_fake / training_real),
-            # never by the full path - dataset roots often contain "real_and_fake".
+            # Judge by parent folder (training_fake / training_real), not the
+            # full path - dataset roots often contain "real_and_fake".
             if "fake" in folder:
                 fake_paths.append(name)
             elif "real" in folder:

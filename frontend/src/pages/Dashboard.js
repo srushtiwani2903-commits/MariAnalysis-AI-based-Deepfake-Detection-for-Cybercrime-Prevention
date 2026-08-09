@@ -65,12 +65,12 @@ export default function Dashboard() {
         <div className="scan-overlay opacity-30" />
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-sm text-neon-blue font-medium">Security Dashboard</p>
+            <p className="text-sm text-neon-blue font-medium">My Dashboard</p>
             <h1 className="text-2xl sm:text-3xl font-bold mt-1">
               Welcome back, <span className="neon-text">{user?.username}</span>
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-2">
-              Monitor your scans, verify media integrity and stay protected against deepfakes.
+              See your recent scans, check how often fakes show up, and start a new one.
             </p>
           </div>
           <div className="flex gap-3">

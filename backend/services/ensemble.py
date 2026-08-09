@@ -1,12 +1,9 @@
-"""Shared multi-model ensemble + trust-score + XAI reason builders.
+"""Shared ensemble, trust score and XAI reason builders.
 
-Every analyzer computes a base `fake_probability` from its deterministic
-heuristic features, then this module:
-  - splits it into several named "models" (CNN / ViT / DeepFace / …) with tiny
-    deterministic per-model deltas, so a per-file ensemble is stable,
-  - derives the final verdict by a weighted vote,
-  - computes a 0-100 evidence trust score,
-  - attaches the reason checklist used by the Explainable-AI panel.
+Splits each analyzer's base fake_probability into several named "models"
+(CNN / ViT / DeepFace / ...) with deterministic per-file deltas, votes them
+into a verdict, computes a 0-100 trust score, and builds the reason checklist
+the Explainable-AI panel shows.
 """
 import hashlib
 
@@ -73,7 +70,7 @@ def build_models(media_type, fake_probability, filename, spread=4.0):
             "prediction": _interpret(score)[0],
             "fake_probability": round(score, 1),
         })
-    # Weighted vote determines the final verdict (overrides base when split).
+    # The weighted vote is the final verdict (overrides the base score).
     final_prob = sum(m["fake_probability"] * m["weight"] for m in models)
     return models, round(final_prob, 1)
 

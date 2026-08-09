@@ -1,20 +1,12 @@
-﻿"""Automated Kaggle data pipeline (on-demand temp cache).
+﻿"""On-demand Kaggle dataset fetcher (temp cache only, nothing persists).
 
-Fetches datasets directly from Kaggle on demand. Nothing is stored in the
-project: each dataset is downloaded into a temporary cache, extracted, used,
-and the cache is deleted as soon as the block exits. Re-fetching downloads
-fresh data (or reuses an in-session cache).
-
-Key API:
+Usage:
     with stream_dataset("user/dataset") as folder:
-        ... use files inside folder ...   # auto cleanup after this block
+        ...use files inside folder...   # temp dir is auto-cleaned
 
-Credentials are resolved once from:
-  1. KAGGLE_USERNAME + KAGGLE_KEY environment variables
-  2. KAGGLE_JSON_PATH (path to a kaggle.json file)
-  3. ~/.kaggle/kaggle.json (standard location)
-and stored to ~/.kaggle/kaggle.json automatically so the Kaggle client
-never needs manual re-authentication.
+Credentials come from KAGGLE_USERNAME/KAGGLE_KEY, KAGGLE_JSON_PATH, or
+~/.kaggle/kaggle.json, and are written to ~/.kaggle/kaggle.json so the Kaggle
+client never needs manual re-authentication.
 """
 import json
 import logging
@@ -135,7 +127,7 @@ def stream_dataset(slug, session_cache=None, force=False):
     """
     write_kaggle_json()
 
-    # In-session reuse so callers do not re-download within one training run.
+    # Reuse the in-session cache so callers don't re-download mid-run.
     if session_cache is not None:
         cached = session_cache.get(slug)
         if cached and os.path.isdir(cached) and not force:

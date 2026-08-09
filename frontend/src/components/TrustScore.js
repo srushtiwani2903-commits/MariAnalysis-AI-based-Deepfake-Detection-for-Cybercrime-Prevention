@@ -30,7 +30,7 @@ export default function TrustScore({ value, size = 120 }) {
       <div className="space-y-0.5 text-xs">
         <p className="font-semibold text-slate-600 dark:text-slate-300">Evidence Trust Score</p>
         <p className={v >= 70 ? "text-emerald-400" : v >= 45 ? "text-amber-400" : "text-rose-400"}>
-          {v >= 70 ? "Strong authentic signals" : v >= 45 ? "Mixed / needs review" : "Suspicious content"}
+          {v >= 70 ? "Looks authentic" : v >= 45 ? "Mixed — worth a closer look" : "Suspicious content"}
         </p>
         <p className="text-slate-500 dark:text-slate-400 max-w-[16rem]">
           Based on metadata, AI artifacts, compression, face consistency and noise.

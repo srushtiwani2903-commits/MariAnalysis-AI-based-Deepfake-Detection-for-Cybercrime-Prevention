@@ -1,11 +1,8 @@
 """Cybercrime reporting portal + blockchain evidence ledger.
 
-- POST   /api/evidence/<scan_id>/register  -> create a case (DF-YYYY-NNNN),
-  anchor the scan in the blockchain ledger and generate the evidence PDF.
-- GET    /api/evidence/cases               -> the current user's reported cases.
-- GET    /api/evidence/chain               -> tamper-evident chain summary.
-- GET    /api/evidence/verify/<scan_id>    -> verify a scan's block integrity.
-- POST   /api/evidence/<case_id>/status    -> update case status (owner).
+Registers a scan as a case (DF-YYYY-NNNN), anchors it in the tamper-evident
+chain and generates the evidence PDF; also serves the cases, chain, verify
+and status endpoints.
 """
 import hashlib
 from datetime import datetime, timezone

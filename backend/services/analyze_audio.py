@@ -1,9 +1,9 @@
 """Audio deepfake analysis.
 
-Uses librosa (when installed) for spectral flatness, zero-crossing rate and MFCC
-variance to detect synthetic / cloned voices. Falls back to wave header analysis
-so the module always works. Returns cloning probability, emotion-mismatch flags
-and the multi-model ensemble + trust score.
+Uses librosa (when installed) for spectral flatness, zero-crossing rate and
+MFCC variance to spot synthetic/cloned voices, with a wave-header fallback so
+it always works. Returns a cloning probability, emotion-mismatch flags, the
+ensemble and a trust score.
 """
 import hashlib
 import os

@@ -5,11 +5,11 @@ import api from "../api/api";
 
 const QUICK = ["What is a deepfake?", "How does the detection work?", "Can it scan videos?", "How to report fraud?"];
 
-// Floating AI-assistant chat widget.
+// Floating assistant chat widget.
 export default function Chatbot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: "ai", text: "Hi! I'm DeepGuard's AI assistant. Ask me anything about deepfakes, detection or reporting." },
+    { role: "ai", text: "Hi! I can help you understand deepfakes, how detection works, or how to report fraud. What do you want to know?" },
   ]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);

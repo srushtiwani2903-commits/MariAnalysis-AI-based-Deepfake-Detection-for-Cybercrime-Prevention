@@ -99,11 +99,10 @@ export default function ScanHub() {
         <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-blue to-neon-purple text-white mb-4">
           <ShieldExclamationIcon className="w-8 h-8" />
         </span>
-        <h1 className="text-3xl font-bold">Deepfake Scan Center</h1>
+        <h1 className="text-3xl font-bold">Scan Center</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-2xl mx-auto">
-          Pick a media type below, drop your file, and MariAnalysis will scan it using the
-          Kaggle reference datasets — detecting AI-generated or manipulated content and
-          giving you prevention guidance.
+          Pick a media type below, drop your file, and MariAnalysis will check it for
+          signs of AI generation or manipulation — then suggest what to do next.
         </p>
       </motion.div>
 
@@ -209,9 +208,9 @@ export default function ScanHub() {
       {/* Detection + prevention explainer */}
       <div className="mt-8 grid sm:grid-cols-3 gap-4">
         {[
-          ["Scan", "Every file is checked against the Kaggle reference datasets using the heuristic engines."],
-          ["Detect", "AI probability, risk level and explainable feature analysis identify manipulated content."],
-          ["Prevent", "Download a forensic PDF/CSV report with recommended actions to avoid being misled."],
+          ["Scan", "Your file is analyzed using the built-in detection engines plus the Kaggle reference data."],
+          ["Detect", "You get an AI probability, a risk level, and a breakdown of which features point to a fake."],
+          ["Prevent", "Download a PDF/CSV report with practical steps to stay safe."],
         ].map(([t, d], i) => (
           <motion.div key={t} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.08 }}
             className="glass rounded-xl p-5">

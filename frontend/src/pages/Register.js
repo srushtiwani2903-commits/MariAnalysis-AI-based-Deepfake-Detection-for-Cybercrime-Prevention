@@ -52,7 +52,7 @@ export default function Register() {
             <ShieldCheckIcon className="w-8 h-8" />
           </span>
           <h1 className="text-2xl font-bold">Create Account</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Join MariAnalysis security platform</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Join MariAnalysis to start scanning media for fakes.</p>
         </div>
 
         {error && (

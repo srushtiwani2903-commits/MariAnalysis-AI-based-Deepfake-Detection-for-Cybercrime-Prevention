@@ -1,4 +1,4 @@
-"""Scan history endpoints: list, search, filter, detail, delete, dashboard stats."""
+"""Scan history endpoints: list, search, filter, detail, delete and stats."""
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 

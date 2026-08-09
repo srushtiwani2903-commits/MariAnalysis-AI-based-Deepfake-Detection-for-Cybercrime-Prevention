@@ -9,8 +9,8 @@ import api from "../api/api";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
-// Evidence & cybercrime reporting portal. Detected deepfakes are anchored to a
-// blockchain-style ledger with a case ID for law-enforcement follow-up.
+// Evidence reporting: flagged deepfakes get a case ID on a blockchain-style
+// ledger you can share with platforms or authorities.
 export default function Evidence() {
   const [cases, setCases] = useState([]);
   const [scans, setScans] = useState([]);

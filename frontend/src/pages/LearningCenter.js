@@ -10,57 +10,57 @@ const articles = [
   {
     icon: ExclamationTriangleIcon,
     title: "What is a Deepfake?",
-    body: "A deepfake is media (image, video, audio or text) generated or manipulated using artificial intelligence. Deep learning models such as GANs and diffusion models can create hyper-realistic fake faces, voices and videos that are nearly impossible to distinguish from reality with the naked eye.",
+    body: "A deepfake is a photo, video, audio clip or piece of text that has been generated or edited with AI. GANs and diffusion models can now create fake faces, voices and videos that look and sound genuinely real to most people.",
   },
   {
     icon: FilmIcon,
     title: "Types of Deepfakes",
-    body: "Common types include: Face Swap (identity transfer), Face Reenactment (driving expressions), Lip Sync (speech manipulation), Voice Cloning (synthesizing a person's voice), AI-written text, and Puppet Master (full body animation). Each type exploits different AI architectures.",
+    body: "The common ones: Face Swap (putting someone's face on another body), Face Reenactment (making a person say or do something they didn't), Lip Sync, Voice Cloning, fully AI-written text, and full-body puppet animation. Each one tricks a different part of your senses.",
   },
   {
     icon: MicrophoneIcon,
     title: "AI Voice Cloning",
-    body: "Voice cloning uses neural vocoders and text-to-speech (TTS) to replicate a person's voice from just a few seconds of audio. Attackers use this to authorize fraudulent transactions, impersonate executives (vishing) or spread misinformation via fake phone calls.",
+    body: "Voice cloning can recreate someone's voice from just a few seconds of audio. Scammers use it to approve fake payments, impersonate a boss over the phone, or spread fake calls — which is why a voice alone is no longer proof someone said something.",
   },
   {
     icon: PhotoIcon,
     title: "Image Manipulation",
-    body: "Image deepfakes include face swapping in photos, GAN-generated synthetic faces, and digital editing (airbrushing, splicing). Forensic markers include inconsistent lighting, blurred edges at face boundaries, unnatural eye reflections, and missing EXIF metadata.",
+    body: "Image fakes include face-swapped photos, fully synthetic faces, and heavy editing like airbrushing or splicing. Common tells: lighting that doesn't match, soft edges around the face, odd reflections in the eyes, and stripped-out photo metadata.",
   },
   {
     icon: FilmIcon,
     title: "Video Manipulation",
-    body: "Videos are the most dangerous deepfake vector — used for political deception, celebrity pornography and financial fraud. Detection relies on temporal analysis: blinking patterns, inconsistent lip-sync, facial warping, and flickering in compression artifacts.",
+    body: "Fake videos are the scariest because people trust them the most. They're used for political misinformation, fake celebrity content and financial fraud. Good detectors look at what's hard to fake over time: blinking, lip sync, facial warping and flicker in the video.",
   },
   {
     icon: ShieldCheckIcon,
     title: "Cybercrime Awareness",
-    body: "Deepfakes fuel scams like CEO fraud (BEC), romance scams, blackmail, and identity theft. Organizations must train employees to verify unusual requests through secondary channels and maintain incident response playbooks for synthetic media attacks.",
+    body: "Deepfakes power scams like fake CEO requests, romance scams, blackmail and identity theft. A simple habit fixes most of these: if a request is unusual, confirm it through a second channel — a different phone number, a video call, or in person.",
   },
   {
     icon: LightBulbIcon,
     title: "Detection Tips",
-    body: "Look for: odd blinking, blurry face borders, mismatched earrings/glasses, unnatural skin texture, inconsistent shadows, weird reflections in eyes, robotic audio prosody, and text that is too perfectly uniform. Use AI detectors for a confidence-based verdict.",
+    body: "Things to check by eye: odd blinking, blurry face edges, mismatched earrings or glasses, unnatural skin texture, inconsistent shadows, weird reflections in the eyes, robotic-sounding speech, and text that reads too perfectly uniform.",
   },
   {
     icon: ShieldCheckIcon,
     title: "Prevention Methods",
-    body: "Adopt digital watermarking (C2PA), content credentials, cryptographic provenance, biometric voiceprints, strict multi-factor authentication, media literacy training, and real-time deepfake screening at the platform edge.",
+    body: "Use watermarking and content credentials where available, turn on multi-factor authentication everywhere important, teach people to double-check unusual requests, and let detection tools give you a second opinion instead of trusting your eyes alone.",
   },
   {
     icon: GlobeAltIcon,
     title: "Latest Deepfake Trends",
-    body: "2024-2026 trends: real-time face-swap in video calls, diffusion-based voice cloning at scale, deepfake-as-a-service platforms, AI election disinformation, and regulatory frameworks (EU AI Act, US legislation) requiring provenance labeling.",
+    body: "Recently: live face-swapping during video calls, voice cloning that's cheap and easy, deepfake-as-a-service sites, AI-driven election misinformation, and new laws (like the EU AI Act) pushing for labels that say when content was AI-made.",
   },
 ];
 
 const faqs = [
-  ["How accurate is MariAnalysis?", "In heuristic mode the ensemble achieves ~85-92% on typical media. When connected to trained CNN/ViT models, accuracy reaches 96%+ on benchmark datasets such as FaceForensics++ and DFDC."],
-  ["Is my uploaded file stored?", "Files are stored locally on the server for analysis and included in your scan history. You can delete any scan (and its file) at any time."],
-  ["Can I use this for legal evidence?", "Reports are forensic-guidance documents. For legal evidence, use certified forensic tools and chain-of-custody procedures."],
-  ["Does it work on any image format?", "PNG, JPG, JPEG, WebP, BMP and TIFF are supported. Video: MP4, AVI, MOV, MKV, WebM. Audio: MP3, WAV, OGG, FLAC, M4A."],
-  ["What makes text detection work?", "We score perplexity (token flow smoothness), burstiness (sentence-length variance) and repetition. LLM-generated text scores low perplexity, low burstiness and high repetition."],
-  ["Can I use a custom model?", "The app currently runs on its built-in heuristic engines, which need no model weights. The API schema is stable, so future model backends can plug in without frontend changes."],
+  ["How accurate is MariAnalysis?", "In the default heuristic mode it lands around 85-92% on typical media. With trained CNN/ViT models plugged in, that climbs past 96% on benchmarks like FaceForensics++ and DFDC."],
+  ["Is my uploaded file stored?", "Files are stored on the server so they can be analyzed and kept in your scan history. You can delete any scan — and its file — at any time."],
+  ["Can I use this for legal evidence?", "Reports are meant as guidance, not certified evidence. For court, you'd want certified forensic tools and a proper chain of custody."],
+  ["Does it work on any image format?", "Images: PNG, JPG, JPEG, WebP, BMP, TIFF. Video: MP4, AVI, MOV, MKV, WebM. Audio: MP3, WAV, OGG, FLAC, M4A."],
+  ["What makes text detection work?", "We look at how smoothly the text flows (perplexity), how much sentence lengths vary (burstiness), and how much it repeats. AI writing tends to be very smooth, very even, and very repetitive."],
+  ["Can I use a custom model?", "Right now the app runs on built-in heuristic engines that need no model weights. The API is stable, so new model backends can be added later without changing the frontend."],
 ];
 
 export default function LearningCenter() {
@@ -72,9 +72,9 @@ export default function LearningCenter() {
         <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-blue to-neon-purple text-white mb-4">
           <AcademicCapIcon className="w-8 h-8" />
         </span>
-        <h1 className="text-3xl sm:text-4xl font-bold">Cybersecurity Learning Center</h1>
+        <h1 className="text-3xl sm:text-4xl font-bold">Learning Center</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3">
-          Understand deepfakes, spot manipulation, and protect yourself from AI-powered cybercrime.
+          Learn what deepfakes are, how to spot them, and how to protect yourself.
         </p>
       </div>
 

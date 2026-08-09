@@ -185,7 +185,7 @@ export default function Results() {
               <div>
                 <p className="text-sm font-semibold">Manipulation Heatmap</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Red regions mark the areas most likely to have been altered by AI generation.
+                  Red regions are where the file most likely shows signs of AI editing.
                 </p>
               </div>
             </div>
@@ -237,7 +237,7 @@ export default function Results() {
       <div className="grid lg:grid-cols-3 gap-6">
         <GlassCard className="lg:col-span-2">
           <h2 className="font-bold mb-3 flex items-center gap-2">
-            <ScaleIcon className="w-5 h-5 text-neon-blue" /> Explainable AI — Why this verdict?
+            <ScaleIcon className="w-5 h-5 text-neon-blue" /> Why this verdict?
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{scan.explanation}</p>
 
@@ -287,7 +287,7 @@ export default function Results() {
             ))}
           </ul>
           <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400">
-            Download the forensic PDF / QR report to share this verification and warn others.
+            Download the PDF or QR report to keep this check on record or share it with others.
           </div>
         </GlassCard>
       </div>
@@ -299,13 +299,13 @@ export default function Results() {
           <ShieldCheckIcon className="w-6 h-6 text-emerald-400" /> Prevention Guidance
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">
-          Protecting yourself against {scan.scan_type} deepfakes — act on these steps.
+          If this {scan.scan_type} was flagged as a deepfake, these steps can help you respond.
         </p>
         <div className="grid sm:grid-cols-3 gap-4 text-sm">
           {[
             ["Verify the source", "Confirm the sender through a second channel before trusting or forwarding."],
-            ["Don't share / repost", "Spreading a detected fake amplifies harm — report it instead."],
-            ["Backup evidence", "Save this forensic report as your record for authorities/platforms."],
+            ["Don't share / repost", "Spreading a detected fake makes it worse — report it instead."],
+            ["Backup evidence", "Save this report as your record for authorities or platforms."],
           ].map(([t, d], i) => (
             <div key={t} className="rounded-2xl bg-white/40 dark:bg-white/5 p-4">
               <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 text-white font-bold text-xs mb-2">{i + 1}</span>

@@ -1,12 +1,11 @@
 """Simulated blockchain evidence ledger.
 
-Each analysed scan (optionally linked to an EvidenceCase) is anchored in an
-immutable, chained block:  block.hash = SHA-256(index | timestamp | prev_hash
-| nonce | data). Any tampering with a stored hash or with the chain breaks the
-verification check, which is what makes the evidence tamper-evident.
+Each scan (optionally linked to an EvidenceCase) goes into a chained block:
+hash = SHA-256(index | timestamp | prev_hash | nonce | data). Tampering with
+any stored hash or link breaks verification, so the evidence is tamper-evident.
 
-This is a *demonstration* of the blockchain concept using SHA-256 and a
-simulated proof-of-work; it is not a distributed network.
+It's a demonstration of the concept (SHA-256 + simulated proof-of-work), not a
+real distributed network.
 """
 import hashlib
 from datetime import datetime, timezone

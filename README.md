@@ -1,15 +1,13 @@
-# MariAnalysis — AI-Based Deepfake Detection for Cybercrime Prevention
+# MariAnalysis
 
-A production-grade, full-stack cybersecurity platform that detects AI-generated /
-manipulated content across **images, videos, audio, and text**. It returns
-confidence scores, explainable (XAI) verdicts, forensic PDF/CSV reports, and a
-learning center for deepfake awareness.
+A full-stack project that checks **images, videos, audio, and text** for signs of
+being AI-generated or manipulated. Each scan returns a confidence score, an
+explanation of *why* the verdict was reached, and a downloadable PDF/CSV report.
+There's also a learning center for getting familiar with deepfake threats.
 
-> **Runs out of the box with smart heuristic AI predictions** (no model weights).
-> Deepfake analysis runs on deterministic, explainable heuristic engines for
-> images, video, audio and text. Model *training* code has been removed; the
-> Kaggle subsystem exists purely as an on-demand dataset fetch/extract/use
-> pipeline and never persists data in the project.
+> **Works right away using deterministic heuristic engines** (no model weights
+> needed). Model training code was removed; the Kaggle subsystem only fetches
+> datasets on demand into a temp cache and never persists them in the project.
 
 ---
 

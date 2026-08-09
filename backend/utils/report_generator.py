@@ -14,7 +14,7 @@ from reportlab.platypus import (HRFlowable, Image, Paragraph, SimpleDocTemplate,
 from utils.helpers import human_size
 
 APP_NAME = "MariAnalysis"
-APP_TAGLINE = "AI-Based Deepfake Detection for Cybercrime Prevention"
+APP_TAGLINE = "Deepfake Detection Report"
 
 
 def _style_sheet():

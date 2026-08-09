@@ -98,7 +98,7 @@ def analyze_text(text, filename="text-input.txt"):
     avg_len = sum(len(s.split()) for s in _sentences(text)) / max(1, len(_sentences(text)))
 
     # --------------------------- heuristic --------------------------- #
-    # AI text: low perplexity (smooth), low burstiness, high repetition.
+    # AI text tends to be smooth (low perplexity), low burstiness and repetitive.
     ppl_score = max(0.0, min(1.0, 1.0 - (ppl / 400.0)))
     burst_score = max(0.0, min(1.0, 1.0 - (burst / 2.5)))
     rep_score = max(0.0, min(1.0, (rep - 0.25) / 0.4))

@@ -81,7 +81,7 @@ export default function Home() {
               className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass text-xs font-medium mb-6"
             >
               <SparklesIcon className="w-4 h-4 text-neon-blue" />
-              Enterprise-Grade Deepfake Defense
+              Deepfake Detection You Can Actually Use
             </motion.span>
 
             <motion.h1
@@ -100,9 +100,9 @@ export default function Home() {
               transition={{ delay: 0.2 }}
               className="mt-6 text-lg text-slate-600 dark:text-slate-300"
             >
-              MariAnalysis uses deep learning to expose AI-generated images, cloned
-              voices, manipulated video and machine-written text — protecting
-              individuals and organizations from cybercrime.
+              MariAnalysis checks images, videos, audio and text for signs of
+              AI-generated or manipulated content — so you can tell what's real
+              from what isn't, before it causes problems.
             </motion.p>
 
             <motion.div
@@ -220,8 +220,8 @@ export default function Home() {
               Everything You Need to <span className="neon-text">Verify Truth</span>
             </h2>
             <p className="text-slate-600 dark:text-slate-300">
-              A complete AI toolkit for detecting synthetic media across every format —
-              powered by computer vision, signal processing and NLP.
+              One place to check media across every format — using computer vision,
+              signal processing and text analysis together.
             </p>
           </div>
 
@@ -256,7 +256,7 @@ export default function Home() {
               The <span className="neon-text">AI Workflow</span>
             </h2>
             <p className="text-slate-600 dark:text-slate-300">
-              From raw upload to forensic report in six transparent stages.
+              From upload to report — six steps, no black boxes.
             </p>
           </div>
 
@@ -290,7 +290,7 @@ export default function Home() {
           >
             <Link to={isAuthenticated ? "/dashboard" : "/register"} className="btn-primary !px-10 !py-4 !text-lg">
               <ShieldCheckIcon className="w-6 h-6" />
-              Start Securing Today
+              Get Started
             </Link>
           </motion.div>
         </div>

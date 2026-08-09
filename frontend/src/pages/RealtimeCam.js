@@ -6,8 +6,8 @@ import {
 import ConfidenceGauge from "../components/ConfidenceGauge";
 import api from "../api/api";
 
-// Real-time webcam deepfake check. Streams frames to the realtime endpoint
-// at ~1 frame/sec and shows a live fake-confidence gauge + bounding overlay.
+// Live webcam check: sends a frame every second to the realtime endpoint and
+// shows a live fake-confidence gauge plus a warning overlay.
 export default function RealtimeCam() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);

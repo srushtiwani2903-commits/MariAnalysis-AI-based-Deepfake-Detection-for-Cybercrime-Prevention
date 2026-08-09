@@ -136,7 +136,7 @@ def analyze_video(file_path, filename, size_bytes):
         sharp.sort()
         median_sharp = sharp[len(sharp) // 2] if sharp else 0
 
-    # Generated faces: smooth, consistent, low motion sharpness variance.
+    # Generated faces look smooth and consistent, with little sharpness variance.
     smooth_face = 1.0 - face_ratio if face_ratio > 0 else 0.0
     flicker = max(0.0, min(1.0, sharpness_var))
     synthetic_drift = max(0.0, min(1.0, drift - 0.5) * 2)

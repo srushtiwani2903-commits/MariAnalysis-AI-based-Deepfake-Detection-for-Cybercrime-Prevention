@@ -31,7 +31,8 @@ export default function Contact() {
         </span>
         <h1 className="text-3xl sm:text-4xl font-bold">Contact Us</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3">
-          Questions, partnerships or deepfake incidents? Our team responds within 24 hours.
+          Got a question, or spotted a deepfake you'd like us to look at? Send a message
+          and we'll get back to you within 24 hours.
         </p>
       </div>
 
@@ -84,7 +85,7 @@ export default function Contact() {
               <EnvelopeIcon className="w-5 h-5 text-neon-blue" /> support@marianalysis.ai
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-              <MapPinIcon className="w-5 h-5 text-neon-blue" /> Global · Remote · 24/7 monitoring
+              <MapPinIcon className="w-5 h-5 text-neon-blue" /> Fully remote · always available
             </div>
             <div className="flex gap-3 pt-2">
               {[

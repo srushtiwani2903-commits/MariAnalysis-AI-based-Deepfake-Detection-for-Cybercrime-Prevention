@@ -1,12 +1,8 @@
-"""Detection endpoints: upload image/video/audio, submit text, run the AI pipeline.
+"""Detection endpoints: upload media, submit text, run the AI pipeline.
 
-Each request:
-  1. Validates auth token + rate limit.
-  2. Validates file extension + size (+ magic bytes where feasible).
-  3. Saves the file to /uploads with a random name (no path traversal).
-  4. Runs the AI pipeline (heuristic or real model).
-  5. Persists ScanHistory + AIPrediction.
-  6. Returns the full result payload.
+Every request validates auth + rate limit, checks the file (extension, size,
+magic bytes where feasible), saves it under a random name, runs the pipeline,
+persists ScanHistory/AIPrediction and returns the full result.
 """
 import os
 

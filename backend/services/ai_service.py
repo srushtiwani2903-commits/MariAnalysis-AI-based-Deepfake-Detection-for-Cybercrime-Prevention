@@ -1,10 +1,8 @@
-﻿"""AI service orchestrator.
+﻿"""Picks the right analyzer per media type and returns the prediction.
 
-Selects the correct analyzer per media type. Runs the smart heuristic
-engines (ELA, spectral analysis, NLP metrics, temporal analysis) which need
-no model weights, so the full product works out of the box.
-
-Every result dict shares the same schema so the frontend never changes.
+The heuristic engines (ELA, spectral analysis, NLP metrics, temporal analysis)
+need no model weights, and every result dict keeps the same schema so the
+frontend never changes.
 """
 import logging
 import time
@@ -19,9 +17,8 @@ from services.analyze_video import analyze_video
 
 logger = logging.getLogger("ai_service")
 
-# Reference Kaggle dataset backing each media type's heuristic scan.
-# Primary dataset per media type: first registry entry wins (extra/optional
-# datasets are appended later, so they never shadow the main reference).
+# First registry entry per media type is the main reference dataset; the
+# optional extras appended later never shadow it.
 _REFERENCE_DATASETS = {}
 for _entry in get_registry():
     if _entry["media"] not in _REFERENCE_DATASETS:

@@ -1,8 +1,8 @@
-"""AI Chatbot (rule-based knowledge assistant).
+"""Rule-based deepfake awareness chatbot.
 
-Answers deepfake-awareness questions (what is a deepfake, how to avoid scams,
-voice cloning, is this image safe, reporting, cyber laws). Keyword intent
-matching with a safe fallback. Stateless and server-side sanitised.
+Answers questions about deepfakes, scams, voice cloning, media safety and
+cyber laws via keyword intent matching with a safe fallback. Stateless and
+sanitised server-side.
 """
 import re
 

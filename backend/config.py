@@ -43,19 +43,16 @@ class Config:
     # explainable heuristic engines in services/. Flag kept for API compat.
     MODEL_ENABLED = os.environ.get("MODEL_ENABLED", "false").lower() == "true"
 
-    # --- Kaggle auto data pipeline ---
-    # Credentials: KAGGLE_USERNAME + KAGGLE_KEY (or KAGGLE_JSON_PATH).
-    # Datasets are fetched directly from Kaggle into a temp cache, extracted,
-    # used, then the temp cache is auto-deleted - nothing is persisted. No
-    # model training occurs anywhere in the app.
+    # Kaggle credentials come from KAGGLE_USERNAME + KAGGLE_KEY (or
+    # KAGGLE_JSON_PATH). Datasets are pulled into a temp cache that is
+    # auto-deleted after use - nothing is persisted, no training happens.
     KAGGLE_USERNAME = os.environ.get("KAGGLE_USERNAME", "")
     KAGGLE_KEY = os.environ.get("KAGGLE_KEY", "")
     KAGGLE_JSON_PATH = os.environ.get("KAGGLE_JSON_PATH", "")
     KAGGLE_AUTOSYNC = os.environ.get("KAGGLE_AUTOSYNC", "false").lower() == "true"
     KAGGLE_FORCE = os.environ.get("KAGGLE_FORCE", "false").lower() == "true"
-    # Kaggle "reference" comparison: on the first scan, a small sample of real +
-    # fake images is pulled directly from Kaggle into a temp cache (auto-deleted),
-    # per-class feature distributions are built in-process, and every later scan is
+    # Reference comparison: a small real+fake sample is pulled from Kaggle
+    # once, per-class feature stats are built in-process, and later scans are
     # scored against them. Disable with KAGGLE_REFERENCE_ENABLED=false.
     KAGGLE_REFERENCE_ENABLED = os.environ.get("KAGGLE_REFERENCE_ENABLED", "true").lower() == "true"
     KAGGLE_REFERENCE_SAMPLE_SIZE = int(os.environ.get("KAGGLE_REFERENCE_SAMPLE_SIZE", 10))
@@ -68,11 +65,9 @@ class Config:
     RATE_LIMIT_REQUESTS = int(os.environ.get("RATE_LIMIT_REQUESTS", 60))
     RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", 60))
 
-    # --- API key protection (defence in depth) ---
-    # Keys are stored as a SHA-256 hash (for lookups/verification) AND as an
-    # encrypted blob (Fernet AES-128) so they are unreadable at rest even if the
-    # database leaks. Set API_KEY_ENCRYPTION_SECRET to a long random value in
-    # production; it defaults to a key derived from SECRET_KEY for convenience.
+    # API keys are stored as a SHA-256 hash (for lookup) plus a Fernet-encrypted
+    # blob, so a leaked database still doesn't expose the keys. Set
+    # API_KEY_ENCRYPTION_SECRET in production; it defaults to SECRET_KEY.
     API_KEY_ENCRYPTION_SECRET = os.environ.get("API_KEY_ENCRYPTION_SECRET", "") or SECRET_KEY
 
     # --- Intrusion Detection & Prevention (fail2ban-style) ---

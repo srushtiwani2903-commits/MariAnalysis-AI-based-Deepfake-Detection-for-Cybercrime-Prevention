@@ -1,8 +1,8 @@
-"""Image deepfake analysis.
+"""Image deepfake analysis using heuristic signals.
 
-Heuristic engine (works without a model): Error Level Analysis (ELA) + color
-statistics + metadata forensics + face/eye/lighting analysis (OpenCV when
-available) + multi-model ensemble + XAI reasons + trust score + heatmap.
+Runs Error Level Analysis, color stats, metadata forensics, and face/eye/
+lighting checks (OpenCV when available), then the ensemble + trust score +
+XAI reasons + heatmap. No model weights needed.
 """
 import hashlib
 import io
@@ -190,17 +190,17 @@ def analyze_image(file_path, filename, size_bytes):
     face = _face_analysis(file_path)
 
     # -------------------------- heuristic scoring -------------------------- #
-    # 1) ELA: genuine photos usually show low localised recompression error.
+    # High localised recompression error points to tampering.
     ela_score = shared["error_level_analysis"]
-    # 2) Overly smooth / uniform images are common in generated faces.
+    # Generated faces tend to be overly smooth and uniform.
     texture_score = shared["texture_uniformity"]
-    # 3) Missing or stripped metadata raises suspicion for some types.
+    # Missing or stripped metadata is mildly suspicious.
     meta_score = 0.0 if meta.get("has_exif") else 0.35
-    # 4) Near-lossless recompression similarity too high => possible synthetic.
+    # Being too similar after lossy recompression suggests a synthetic source.
     recomp_score = shared["recompression_similarity"]
-    # 5) Low color variance (flat / uncanny) bias.
+    # Low color variance reads flat / uncanny.
     flatness = shared["color_flatness"]
-    # 6) Face heuristics (when a face is present).
+    # Face heuristics only apply when a face is present.
     if face["faces_detected"]:
         face_score = (1.0 - face["face_consistency"]) * 0.6 + (1.0 - face["eye_blink_pattern"]) * 0.4
         lighting_score = 1.0 - face["lighting_consistency"]
@@ -235,9 +235,8 @@ def analyze_image(file_path, filename, size_bytes):
     base = max(0.0, min(1.0, base + (lighting_score * 0.03 if face_weight else 0.0)))
 
     # ----------------------- Kaggle reference blend ------------------------ #
-    # Score the same features against the real-vs-fake distributions pulled
-    # from Kaggle (in-process profile, built once). Boosts the confidence of
-    # the heuristic verdict when the Kaggle reference agrees.
+    # Blend with the Kaggle reference profile when it agrees with the
+    # heuristic verdict - boosts confidence.
     kaggle_info = None
     try:
         from services.kaggle_reference import kaggle_reference

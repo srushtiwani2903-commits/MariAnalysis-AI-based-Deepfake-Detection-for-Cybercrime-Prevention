@@ -1,12 +1,9 @@
-"""Intrusion Detection & Prevention (IDPS) - fail2ban-style security layer.
+"""IDPS: fail2ban-style intrusion detection and prevention.
 
-Features:
-  - Per-IP failed-attempt tracking with sliding window (brute-force lockout).
-  - Automatic temporary ban of IPs that exceed the threshold.
-  - Intrusion events written to the DB `logs` table AND an append-only JSONL
-    file (security/logs/intrusions.jsonl) so incidents survive restarts.
-  - Audit trail helper for every data create/update/delete ("auto-secure data").
-  - Thread-safe; all state guarded by a lock.
+Tracks failed logins per IP with a sliding window and temporarily bans IPs
+that pass the threshold. Events go to the logs table and an append-only
+security/logs/intrusions.jsonl so incidents survive restarts. Also exposes the
+audit helper for every create/update/delete. All state is lock-guarded.
 """
 import json
 import logging
