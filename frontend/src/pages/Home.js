@@ -126,7 +126,7 @@ export default function Home() {
               transition={{ delay: 0.5 }}
               className="mt-6 font-mono text-xs text-slate-400 dark:text-slate-500 terminal-cursor"
             >
-              $ marianalysis scan --media image --model ensemble --explain yes
+              . marianalysis scan --media image --model ensemble --explain yes
             </motion.p>
           </div>
 
@@ -148,19 +148,19 @@ export default function Home() {
 
               <div className="space-y-4 font-mono text-xs">
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">loading sample_video.mp4</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">extracting 48 frames…</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">faces detected: 2</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">temporal inconsistency: 0.83</span>
                 </div>
 
@@ -183,7 +183,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex items-center gap-3 pt-1">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">report.pdf generated ✓</span>
                 </div>
               </div>
