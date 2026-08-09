@@ -1,4 +1,5 @@
-"""Database models: Users, ScanHistory, Reports, Logs, AIPredictions."""
+"""Database models: Users, ScanHistory, Reports, Logs, AIPredictions,
+EvidenceCases, BlockchainBlocks, ApiKeys."""
 from datetime import datetime, timezone
 
 from extensions import db
@@ -49,8 +50,9 @@ class User(db.Model):
 
 
 class ActiveSession(db.Model):
-    """One row per logged-in session (JWT jti). Used to detect duplicate logins
-    and to revoke sessions on logout."""
+    """One row per logged-in session (JWT jti). Used to enforce the single
+    active-session rule: a new login replaces every previous session, so old
+    JWTs are rejected server-side the moment the row is deactivated."""
     __tablename__ = "active_sessions"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -61,6 +63,10 @@ class ActiveSession(db.Model):
     last_seen_at = db.Column(db.DateTime, default=utcnow)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     ip_address = db.Column(db.String(64), default="")
+    user_agent = db.Column(db.String(255), default="")
+    # Why a session was deactivated: superseded (new login) | logout |
+    # inactivity | expired. Drives the client-facing 401 message.
+    revoked_reason = db.Column(db.String(32), nullable=True)
 
 
 class ScanHistory(db.Model):
@@ -81,6 +87,10 @@ class ScanHistory(db.Model):
     explanation = db.Column(db.Text, default="")
     recommendations = db.Column(db.Text, default="")
     suspicious_sections = db.Column(db.JSON, default=list)  # text highlights / timestamps
+    trust_score = db.Column(db.Float, default=0.0)          # 0-100 evidence trust score
+    file_hash = db.Column(db.String(64), default="")        # SHA-256 of the analyzed file
+    models = db.Column(db.JSON, default=list)               # per-model ensemble verdicts
+    reasons = db.Column(db.JSON, default=list)              # XAI checklist: {check, passed, detail}
 
     processing_time_ms = db.Column(db.Integer, default=0)
     scan_metadata = db.Column(db.JSON, default=dict)        # extracted metadata (EXIF etc.)
@@ -109,6 +119,14 @@ class ScanHistory(db.Model):
                 "recommendations": self.recommendations,
                 "suspicious_sections": self.suspicious_sections or [],
                 "scan_metadata": self.scan_metadata or {},
+                "trust_score": self.trust_score,
+                "file_hash": self.file_hash,
+                "models": self.models or [],
+                "reasons": self.reasons or [],
+                "case": EvidenceCase.query.filter_by(scan_id=self.id).first().to_dict()
+                        if EvidenceCase.query.filter_by(scan_id=self.id).first() else None,
+                "chain": BlockchainBlock.query.filter_by(scan_id=self.id).first().to_dict()
+                         if BlockchainBlock.query.filter_by(scan_id=self.id).first() else None,
                 "model": self.prediction.to_dict() if self.prediction else None,
             })
         return data
@@ -174,4 +192,90 @@ class Log(db.Model):
             "details": self.details,
             "ip_address": self.ip_address,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EvidenceCase(db.Model):
+    """Cybercrime reporting portal: one case per reported scan. Case IDs look
+    like DF-2026-0001 and are immutable identifiers for law-enforcement follow-up."""
+    __tablename__ = "evidence_cases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    case_id = db.Column(db.String(40), unique=True, nullable=False, index=True)
+    scan_id = db.Column(db.Integer, db.ForeignKey("scan_history.id"), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    status = db.Column(db.String(20), default="open")      # open | reviewed | closed
+    platform = db.Column(db.String(120), default="")
+    notes = db.Column(db.Text, default="")
+    report_hash = db.Column(db.String(64), default="")     # SHA-256 of the evidence report
+    created_at = db.Column(db.DateTime, default=utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "case_id": self.case_id,
+            "scan_id": self.scan_id,
+            "status": self.status,
+            "platform": self.platform,
+            "notes": self.notes,
+            "report_hash": self.report_hash,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class BlockchainBlock(db.Model):
+    """Simulated blockchain evidence ledger. Each analysed scan gets a block
+    chained to the previous one via its SHA-256 hash, so reports can be
+    verified against tampering (immutability is demonstrated, not enforced)."""
+    __tablename__ = "blockchain_blocks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    index = db.Column(db.Integer, unique=True, nullable=False)
+    scan_id = db.Column(db.Integer, db.ForeignKey("scan_history.id"), nullable=True, unique=True)
+    case_id = db.Column(db.String(40), nullable=True)
+    file_hash = db.Column(db.String(64), default="")       # SHA-256 of analysed media
+    report_hash = db.Column(db.String(64), default="")     # SHA-256 of generated report
+    timestamp = db.Column(db.String(40), nullable=False)   # ISO-8601 UTC
+    data = db.Column(db.JSON, default=dict)                # immutable summary payload
+    prev_hash = db.Column(db.String(64), nullable=False)
+    nonce = db.Column(db.Integer, default=0)
+    hash = db.Column(db.String(64), nullable=False)
+
+    def to_dict(self):
+        return {
+            "index": self.index,
+            "scan_id": self.scan_id,
+            "case_id": self.case_id,
+            "file_hash": self.file_hash,
+            "report_hash": self.report_hash,
+            "timestamp": self.timestamp,
+            "data": self.data or {},
+            "prev_hash": self.prev_hash,
+            "nonce": self.nonce,
+            "hash": self.hash,
+        }
+
+
+class ApiKey(db.Model):
+    """API keys for the browser-extension / external tooling. Only a SHA-256
+    hash and a Fernet-encrypted blob of the key are stored; the plaintext is
+    shown once at creation and is otherwise recoverable only with the server
+    master secret (Config.API_KEY_ENCRYPTION_SECRET)."""
+    __tablename__ = "api_keys"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    label = db.Column(db.String(120), default="")
+    key_hash = db.Column(db.String(64), unique=True, nullable=False)
+    key_encrypted = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    last_used = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "label": self.label,
+            "key_hash": self.key_hash[:16],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_used": self.last_used.isoformat() if self.last_used else None,
         }

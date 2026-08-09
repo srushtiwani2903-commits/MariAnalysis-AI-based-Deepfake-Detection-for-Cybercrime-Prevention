@@ -6,6 +6,7 @@ import {
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { ChartBarIcon } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
+import Leaderboard from "../components/Leaderboard";
 import api from "../api/api";
 import { useTheme } from "../context/ThemeContext";
 
@@ -23,6 +24,7 @@ export default function Analytics() {
   const [fakeReal, setFakeReal] = useState({ fake: 0, authentic: 0, inconclusive: 0 });
   const [byType, setByType] = useState({ image: 0, video: 0, audio: 0, text: 0 });
   const [accuracyTrend, setAccuracyTrend] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
 
   useEffect(() => {
     Promise.all([
@@ -32,14 +34,16 @@ export default function Analytics() {
       api.get("/analytics/fake-vs-real"),
       api.get("/analytics/by-type"),
       api.get("/analytics/accuracy-trend"),
+      api.get("/analytics/deepfake-types"),
     ])
-      .then(([o, d, w, fr, bt, at]) => {
+      .then(([o, d, w, fr, bt, at, df]) => {
         setOverview(o.data);
         setDaily(d.data.series);
         setWeekly(w.data.series);
         setFakeReal(fr.data);
         setByType(bt.data);
         setAccuracyTrend(at.data.series);
+        setLeaderboard(df.data.leaderboard || []);
       })
       .catch(() => {});
   }, []);
@@ -154,6 +158,13 @@ export default function Analytics() {
             />
           </div>
         </GlassCard>
+
+        {leaderboard.length > 0 && (
+          <GlassCard className="lg:col-span-2">
+            <h3 className="font-bold mb-4">Deepfake Types Leaderboard</h3>
+            <Leaderboard entries={leaderboard.map((l) => ({ type: `${l.icon} ${l.type}`, count: l.percent }))} />
+          </GlassCard>
+        )}
       </div>
     </div>
   );

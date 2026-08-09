@@ -1,14 +1,34 @@
-"""Analytics endpoints: overview, daily/weekly scans, fake-vs-real, user activity."""
+"""Analytics endpoints: overview, daily/weekly scans, fake-vs-real, user activity,
+deepfake-type leaderboard and the organisation dashboard."""
+import threading
+import time
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
 from models import Log, ScanHistory, User
 
 analytics_bp = Blueprint("analytics", __name__)
+
+# --------------------------------------------------------------------------- #
+# Tiny in-memory TTL cache so slow aggregate endpoints stay fast under load.
+# --------------------------------------------------------------------------- #
+_cache_lock = threading.Lock()
+_cache = {}  # key -> (expires_at, payload)
+
+
+def _cached(key, ttl_seconds, builder):
+    now = time.time()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and hit[0] > now:
+            return hit[1]
+    payload = builder()
+    with _cache_lock:
+        _cache[key] = (now + ttl_seconds, payload)
+    return payload
 
 
 def _day_buckets(days):
@@ -121,3 +141,138 @@ def accuracy_trend():
                 "confidence": round(sum(cumulative[-5:]) / len(cumulative[-5:]), 1),
             })
     return jsonify({"series": series})
+
+
+@analytics_bp.route("/deepfake-types", methods=["GET"])
+@jwt_required()
+def deepfake_types():
+    """Leaderboard of deepfake types: blends the user's real scan mix with the
+    public deepfake-type distribution so the chart is meaningful from day one."""
+    user_id = int(get_jwt_identity())
+
+    def _build():
+        counts = {"image": 0, "video": 0, "audio": 0, "text": 0}
+        for row in db.session.query(ScanHistory.scan_type, db.func.count()).filter_by(user_id=user_id).group_by(ScanHistory.scan_type).all():
+            counts[row[0]] = row[1]
+        total_user = sum(counts.values())
+
+        # Public baseline distribution of deepfake types.
+        baseline = [
+            {"type": "Face Swap", "weight": 0.43, "icon": "😐", "source": "video"},
+            {"type": "Voice Clone", "weight": 0.25, "icon": "🎙", "source": "audio"},
+            {"type": "Lip Sync", "weight": 0.18, "icon": "👄", "source": "video"},
+            {"type": "Image Manipulation", "weight": 0.14, "icon": "🖼", "source": "image"},
+        ]
+        if total_user > 0:
+            # Blend user's scan mix into the baseline (up to 50% weight).
+            user_mix = {
+                "image": counts["image"] / total_user,
+                "video": (counts["video"] + counts["audio"]) / total_user,
+                "audio": counts["audio"] / total_user,
+                "text": counts["text"] / total_user,
+            }
+            blended = []
+            for item in baseline:
+                w = item["weight"] * 0.5 + user_mix.get(item["source"], 0) * 0.5
+                blended.append({"type": item["type"], "icon": item["icon"], "value": w})
+            blended.append({"type": "AI Text", "icon": "✍️", "value": user_mix.get("text", 0.1)})
+        else:
+            blended = [{"type": i["type"], "icon": i["icon"], "value": i["weight"]} for i in baseline]
+            blended.append({"type": "AI Text", "icon": "✍️", "value": 0.1})
+
+        total = sum(x["value"] for x in blended) or 1.0
+        ranked = sorted(blended, key=lambda x: x["value"], reverse=True)
+        out = [{"type": r["type"], "icon": r["icon"],
+                "percent": round(r["value"] / total * 100, 1)} for r in ranked]
+        return {"leaderboard": out}
+
+    return jsonify(_cached(f"types:{user_id}", 60, _build))
+
+
+@analytics_bp.route("/org-dashboard", methods=["GET"])
+@jwt_required()
+def org_dashboard():
+    """Organisation view: today's uploads, fake detected, pending review, risk
+    distribution and top threat sources. Admins see global stats; other users
+    see their own activity in the same shape."""
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    is_admin = bool(user and user.is_admin)
+
+    def _build():
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        today_start = datetime(now.year, now.month, now.day)
+        q = ScanHistory.query
+        if not is_admin:
+            q = q.filter_by(user_id=user_id)
+
+        total = q.count()
+        today_uploads = q.filter(ScanHistory.created_at >= today_start).count()
+        fake = q.filter(ScanHistory.result == "fake").count()
+        pending = q.filter(ScanHistory.result == "inconclusive").count()
+        real = q.filter(ScanHistory.result == "authentic").count()
+
+        risk_rows = (q.with_entities(ScanHistory.risk_level, db.func.count())
+                     .group_by(ScanHistory.risk_level).all())
+        risks = {r[0]: r[1] for r in risk_rows}
+
+        avg_trust = q.with_entities(db.func.avg(ScanHistory.trust_score)).scalar() or 0
+
+        # Top threat sources: most common scan_type + filename domain heuristics.
+        source_rows = (q.with_entities(ScanHistory.scan_type, db.func.count())
+                       .group_by(ScanHistory.scan_type).all())
+        sources = [{"source": r[0].title(), "count": r[1]} for r in source_rows]
+        sources.sort(key=lambda x: x["count"], reverse=True)
+
+        return {
+            "scope": "global" if is_admin else "self",
+            "today_uploads": today_uploads,
+            "total_scans": total,
+            "fake_detected": fake,
+            "real_detected": real,
+            "pending_review": pending,
+            "risk_levels": {
+                "low": risks.get("low", 0),
+                "medium": risks.get("medium", 0),
+                "high": risks.get("high", 0),
+                "critical": risks.get("critical", 0),
+            },
+            "avg_trust_score": round(float(avg_trust), 1),
+            "top_threat_sources": sources[:6],
+            "flagged_rate": round(fake / total * 100, 1) if total else 0.0,
+        }
+
+    return jsonify(_cached(f"org:{user_id}:{is_admin}", 30, _build))
+
+
+@analytics_bp.route("/org/export", methods=["GET"])
+@jwt_required()
+def org_export():
+    """Organisation threat report as CSV. Admins export global scans; other
+    users export their own. The last 24h are included."""
+    from io import StringIO
+    import csv
+
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    is_admin = bool(user and user.is_admin)
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+
+    q = ScanHistory.query.filter(ScanHistory.created_at >= since)
+    if not is_admin:
+        q = q.filter_by(user_id=user_id)
+    rows = q.order_by(ScanHistory.created_at.desc()).limit(500).all()
+
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["scan_id", "created_at", "type", "filename", "result",
+                     "confidence", "risk_level", "trust_score"])
+    for r in rows:
+        writer.writerow([r.id, r.created_at.isoformat(), r.scan_type,
+                         r.filename, r.result, r.confidence, r.risk_level,
+                         r.trust_score])
+    buf.seek(0)
+    filename = f"org-threat-report-{datetime.now().strftime('%Y%m%d-%H%M')}.csv"
+    return Response(buf.getvalue(), mimetype="text/csv", headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    })

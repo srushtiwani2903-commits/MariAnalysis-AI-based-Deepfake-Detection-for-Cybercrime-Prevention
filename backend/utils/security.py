@@ -7,10 +7,16 @@ Security posture:
   - Input sanitize : filenames are stripped, length-limited, and random-renamed before saving.
   - File security  : extension + magic-byte sniffing, size cap, and no path traversal.
 """
+import base64
+import hashlib
 import re
 import threading
 import time
 from pathlib import Path
+
+from cryptography.fernet import Fernet
+
+from config import Config
 
 # --------------------------------------------------------------------------- #
 # Rate limiting (in-memory sliding window per client key)
@@ -39,6 +45,45 @@ class RateLimiter:
 
 
 limiter = RateLimiter()
+
+# --------------------------------------------------------------------------- #
+# API key protection: hash (lookup/verification) + encryption (at rest)
+# --------------------------------------------------------------------------- #
+def _api_key_fernet() -> Fernet:
+    """Deterministic Fernet instance derived from Config.API_KEY_ENCRYPTION_SECRET."""
+    raw = (Config.API_KEY_ENCRYPTION_SECRET or Config.SECRET_KEY or "insecure").encode()
+    key = base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
+    return Fernet(key)
+
+
+def hash_api_key(plaintext: str) -> str:
+    """SHA-256 digest used for fast lookups / verification (never reversible)."""
+    return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+
+
+def encrypt_api_key(plaintext: str) -> str:
+    """Fernet-encrypt the plaintext key so it is unreadable at rest."""
+    return _api_key_fernet().encrypt(plaintext.encode("utf-8")).decode("ascii")
+
+
+def decrypt_api_key(ciphertext: str) -> str:
+    """Decrypt a stored ciphertext back to the plaintext key (master-secret only)."""
+    return _api_key_fernet().decrypt(ciphertext.encode("ascii")).decode("utf-8")
+
+
+def encrypt_secret(plaintext: str) -> str:
+    """Fernet-encrypt any confidential value at rest (same key domain as API keys)."""
+    return encrypt_api_key(plaintext)
+
+
+def decrypt_secret(ciphertext: str) -> str:
+    """Decrypt a confidential value stored with encrypt_secret()."""
+    return decrypt_api_key(ciphertext)
+
+
+def is_encrypted(ciphertext: str) -> bool:
+    """True if a stored value looks like a Fernet token (encrypt_secret/encrypt_api_key)."""
+    return bool(ciphertext) and ciphertext.startswith("gAAAAA")
 
 # --------------------------------------------------------------------------- #
 # File validation

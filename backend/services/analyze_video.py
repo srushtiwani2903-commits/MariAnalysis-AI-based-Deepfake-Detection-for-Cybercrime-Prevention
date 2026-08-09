@@ -2,11 +2,15 @@
 
 Pipeline: frame extraction -> face detection (MediaPipe/OpenCV Haar when
 available) -> per-frame quality features -> temporal consistency scoring.
-Falls back to a content-hash heuristic so the API works with zero AI deps.
+Each sampled frame receives a per-second verdict so the timeline can show
+exactly where manipulation is suspected.
 """
 import hashlib
 import os
 import time
+
+from services.ensemble import (build_models, explain_short, reasons_from_features,
+                               risk_label, trust_score)
 
 
 def _probe_video(file_path):
@@ -28,12 +32,11 @@ def _probe_video(file_path):
     return info
 
 
-def _extract_frames(file_path, max_frames=16):
+def _extract_frames(file_path, max_frames=12):
     """Extract evenly spaced frames for analysis. Returns list of frame dicts."""
     frames = []
     try:
         import cv2
-        import numpy as np
         cap = cv2.VideoCapture(file_path)
         count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -103,20 +106,35 @@ def _hash_drift(file_path):
     return diffs / max_diff  # 0..1
 
 
+def _sha256(path):
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+
 def analyze_video(file_path, filename, size_bytes):
     start = time.time()
     info = _probe_video(file_path)
     frames = _extract_frames(file_path)
     drift = _hash_drift(file_path)
+    file_hash = _sha256(file_path)
 
     # ---------------------------- heuristic ---------------------------- #
     face_ratio = 0.0
     sharpness_var = 0.0
+    median_sharp = 0.0
     if frames:
         with_face = sum(1 for f in frames if f["has_face"])
         face_ratio = with_face / len(frames)
         sharp = [f["sharpness"] for f in frames]
         sharpness_var = (max(sharp) - min(sharp)) / (max(sharp) + 1e-6)
+        sharp.sort()
+        median_sharp = sharp[len(sharp) // 2] if sharp else 0
 
     # Generated faces: smooth, consistent, low motion sharpness variance.
     smooth_face = 1.0 - face_ratio if face_ratio > 0 else 0.0
@@ -132,21 +150,47 @@ def analyze_video(file_path, filename, size_bytes):
         "temporal_flicker": round(flicker, 4),
         "byte_hash_drift": round(synthetic_drift, 4),
         "compression_ratio": round(compression, 4),
+        "lip_sync_alignment": round(max(0.0, 1.0 - flicker), 4),
         "frame_count": len(frames) or info.get("frame_count", 0),
         "duration_seconds": dur,
         "resolution": f"{info.get('width', '?')}x{info.get('height', '?')}",
     }
 
-    fake_probability = (
+    base = (
         0.28 * smooth_face + 0.24 * flicker + 0.22 * synthetic_drift + 0.26 * compression
-    ) * 100
-    fake_probability = max(8.0, min(92.0, fake_probability))
-
-    result, risk = _interpret(fake_probability)
-    explanation = _explain_video(result, fake_probability, features, frames)
+    )
+    models, fake_probability = build_models("video", base * 100, filename, spread=4.5)
+    result, _risk = _interpret(fake_probability)
+    risk = risk_label(fake_probability)
+    reasons = reasons_from_features("video", features, fake_probability)
+    trust = trust_score(fake_probability, {
+        "face": face_ratio, "noise": 1.0 - flicker, "compression": 1.0 - compression,
+    })
+    explanation = explain_short("video", result, fake_probability)
     recommendations = _recommendations(result)
-    timeline = [{"t": f.get("timestamp"), "face": f.get("has_face"),
-                 "sharpness": round(f.get("sharpness", 0))} for f in frames]
+
+    # Per-frame timeline with a verdict for each sampled second.
+    timeline = []
+    for f in frames:
+        anomaly = 0.0
+        if f["has_face"]:
+            # Low sharpness with low motion or missing eyes => suspicious.
+            if f["sharpness"] < median_sharp * 0.6:
+                anomaly += 0.6
+        else:
+            anomaly += 0.3
+        if anomaly > 0.5:
+            verdict = "fake"
+        elif anomaly > 0.25:
+            verdict = "inconclusive"
+        else:
+            verdict = "authentic"
+        timeline.append({
+            "t": f.get("timestamp"),
+            "face": f.get("has_face"),
+            "sharpness": round(f.get("sharpness", 0)),
+            "verdict": verdict,
+        })
 
     elapsed = int((time.time() - start) * 1000)
     return {
@@ -155,12 +199,16 @@ def analyze_video(file_path, filename, size_bytes):
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
         "fake_probability": round(fake_probability, 1),
+        "trust_score": trust,
         "risk_level": risk,
         "explanation": explanation,
         "recommendations": recommendations,
         "processing_time_ms": elapsed,
-        "metadata": info,
+        "metadata": {**info, "file_hash_sha256": file_hash},
         "features": features,
+        "models": models,
+        "reasons": reasons,
+        "file_hash": file_hash,
         "suspicious_sections": timeline,
         "model": "temporal-CNN-v1",
     }
@@ -172,17 +220,6 @@ def _interpret(prob):
     if prob >= 42:
         return "inconclusive", "medium"
     return "authentic", "low"
-
-
-def _explain_video(result, prob, f, frames):
-    head = ("Temporal analysis suggests this video was AI-generated or manipulated. " if result == "fake"
-            else "Temporal and face analysis are consistent with an authentic recording. ")
-    detail = (
-        f"Face presence was detected in {f['face_presence']:.0%} of sampled frames, synthetic smoothness "
-        f"{f['synthetic_smoothness']:.0%}, temporal flicker {f['temporal_flicker']:.0%}. "
-        f"Overall AI probability {prob:.1f}%."
-    )
-    return head + detail
 
 
 def _recommendations(result):

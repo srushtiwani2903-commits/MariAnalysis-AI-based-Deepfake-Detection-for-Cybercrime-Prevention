@@ -51,8 +51,8 @@ def _confidence_bar(width_mm, pct):
     return table
 
 
-def generate_pdf_report(scan, out_dir: str) -> str:
-    """Generate a branded PDF report for a scan. Returns the file path."""
+def generate_pdf_report(scan, out_dir: str, case=None, chain=None) -> str:
+    """Generate a branded forensic PDF report for a scan. Returns the file path."""
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, f"report_{scan.id}_{uuid.uuid4().hex[:8]}.pdf")
     styles = _style_sheet()
@@ -60,7 +60,7 @@ def generate_pdf_report(scan, out_dir: str) -> str:
     doc = SimpleDocTemplate(out_path, pagesize=A4,
                             leftMargin=18 * mm, rightMargin=18 * mm,
                             topMargin=18 * mm, bottomMargin=18 * mm,
-                            title=f"{APP_NAME} - Detection Report #{scan.id}",
+                            title=f"{APP_NAME} - AI Forensics Report #{scan.id}",
                             author=APP_NAME)
     story = []
 
@@ -77,6 +77,16 @@ def generate_pdf_report(scan, out_dir: str) -> str:
     story.append(Paragraph(f"VERDICT: <font color='{rc}'>{result_title}</font>", styles["H2Neon"]))
     story.append(Spacer(1, 2))
 
+    # Case ID (cybercrime reporting portal)
+    case_id = (case.case_id if case else "") or (chain.case_id if chain else "")
+    if case_id:
+        badge = Paragraph(
+            f"EVIDENCE CASE: <font color='#7c3aed'>{case_id}</font>"
+            + (f"  &nbsp;|  Status: <font color='#7c3aed'>{case.status.upper()}</font>" if case else ""),
+            styles["H2Neon"])
+        story.append(badge)
+        story.append(Spacer(1, 2))
+
     # Summary table
     summary = [
         ["Report ID", f"#{scan.id}"],
@@ -86,9 +96,11 @@ def generate_pdf_report(scan, out_dir: str) -> str:
         ["Timestamp", scan.created_at.strftime("%Y-%m-%d %H:%M UTC") if scan.created_at else "N/A"],
         ["Confidence", f"{scan.confidence:.1f}%"],
         ["Fake Probability", f"{scan.fake_probability:.1f}%"],
+        ["Trust Score", f"{scan.trust_score:.1f} / 100"],
         ["Risk Level", scan.risk_level.title()],
         ["Processing Time", f"{scan.processing_time_ms} ms"],
         ["Model", scan.prediction.model_name if scan.prediction else "heuristic-ensemble-v1"],
+        ["SHA-256 File Hash", (scan.file_hash or "N/A")],
     ]
     t = Table(summary, colWidths=[40 * mm, 110 * mm])
     t.setStyle(TableStyle([
@@ -107,17 +119,91 @@ def generate_pdf_report(scan, out_dir: str) -> str:
     story.append(_confidence_bar(140, scan.confidence))
     story.append(Spacer(1, 6))
 
+    # Multi-model ensemble table
+    models = scan.models or []
+    if models:
+        story.append(Paragraph("Multi-Model Ensemble", styles["H2Neon"]))
+        model_rows = [["Model", "Prediction", "Fake Probability"]]
+        for m in models[:8]:
+            model_rows.append([str(m.get("name", "")),
+                               str(m.get("prediction", "")),
+                               f"{m.get('fake_probability', 0):.1f}%"])
+        mt = Table(model_rows, colWidths=[70 * mm, 50 * mm, 30 * mm])
+        mt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#7c3aed")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(mt)
+        story.append(Spacer(1, 6))
+
     # Explanation (XAI)
     story.append(Paragraph("Explainable AI Analysis", styles["H2Neon"]))
     story.append(Paragraph(scan.explanation or "No explanation available.", styles["BodyNeon"]))
     story.append(Spacer(1, 4))
 
+    # XAI reason checklist
+    reasons = scan.reasons or []
+    if reasons:
+        story.append(Paragraph("Detection Reasons (XAI checklist)", styles["H2Neon"]))
+        for r in reasons[:12]:
+            mark = "PASS" if r.get("passed") else "FAIL"
+            color = "#10b981" if r.get("passed") else "#f43f5e"
+            text = f"<font color='{color}'><b>[{mark}]</b></font> {r.get('check', '')}"
+            if r.get("detail"):
+                text += f" — {r.get('detail', '')}"
+            story.append(Paragraph(f"&bull; {text}", styles["BodyNeon"]))
+        story.append(Spacer(1, 4))
+
+    # Metadata forensics table
+    meta = scan.scan_metadata or {}
+    meta_items = list(meta.items())[:20]
+    if meta_items:
+        story.append(Paragraph("Metadata Forensics", styles["H2Neon"]))
+        mt2 = Table([["Field", "Value"]] +
+                    [[str(k)[:60], str(v)[:80]] for k, v in meta_items],
+                    colWidths=[60 * mm, 90 * mm])
+        mt2.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0a0e27")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        story.append(mt2)
+        story.append(Spacer(1, 6))
+
     # Suspicious sections
     if scan.suspicious_sections:
-        story.append(Paragraph("Suspicious Regions", styles["H2Neon"]))
+        story.append(Paragraph("Suspicious Regions / Timeline", styles["H2Neon"]))
         for sec in scan.suspicious_sections[:10]:
             snippet = str(sec)[:180]
             story.append(Paragraph(f"&bull; {snippet}", styles["BodyNeon"]))
+        story.append(Spacer(1, 4))
+
+    # Blockchain proof
+    if chain:
+        story.append(Paragraph("Blockchain Evidence Proof", styles["H2Neon"]))
+        chain_table = Table([
+            ["Block Index", str(chain.index)],
+            ["Block Hash", chain.hash],
+            ["Previous Hash", chain.prev_hash],
+            ["File SHA-256", chain.file_hash or "N/A"],
+            ["Timestamp", chain.timestamp],
+            ["Nonce", str(chain.nonce)],
+        ], colWidths=[40 * mm, 110 * mm])
+        chain_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f3f4f6")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(chain_table)
         story.append(Spacer(1, 4))
 
     # Recommendations
@@ -138,7 +224,7 @@ def generate_pdf_report(scan, out_dir: str) -> str:
     return out_path
 
 
-def generate_csv_report(scan) -> str:
+def generate_csv_report(scan, case=None) -> str:
     """Generate CSV text for a scan report."""
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -151,7 +237,10 @@ def generate_csv_report(scan) -> str:
     writer.writerow(["result", scan.result])
     writer.writerow(["confidence", f"{scan.confidence:.2f}"])
     writer.writerow(["fake_probability", f"{scan.fake_probability:.2f}"])
+    writer.writerow(["trust_score", f"{scan.trust_score:.2f}"])
     writer.writerow(["risk_level", scan.risk_level])
+    writer.writerow(["file_hash_sha256", scan.file_hash or ""])
+    writer.writerow(["case_id", (case.case_id if case else "") or ""])
     writer.writerow(["processing_time_ms", scan.processing_time_ms])
     writer.writerow(["explanation", scan.explanation])
     writer.writerow(["recommendations", scan.recommendations.replace("\n", " | ")])

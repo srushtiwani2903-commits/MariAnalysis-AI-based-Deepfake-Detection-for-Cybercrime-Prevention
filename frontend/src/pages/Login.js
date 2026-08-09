@@ -9,7 +9,12 @@ export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ identifier: "", password: "" });
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState(() => sessionStorage.getItem("deepguard-401-message") || "");
   const [loading, setLoading] = useState(false);
+
+  if (notice) {
+    sessionStorage.removeItem("deepguard-401-message");
+  }
 
   const doLogin = async () => {
     setError("");
@@ -44,6 +49,16 @@ export default function Login() {
           <h1 className="text-2xl font-bold">Welcome Back</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Sign in to continue scanning</p>
         </div>
+
+        {notice && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 text-amber-300 text-sm bg-amber-400/10 border border-amber-400/40 rounded-xl px-4 py-3 mb-5"
+          >
+            <ShieldExclamationIcon className="w-5 h-5 shrink-0" /> {notice}
+          </motion.div>
+        )}
 
         {error && (
           <motion.div

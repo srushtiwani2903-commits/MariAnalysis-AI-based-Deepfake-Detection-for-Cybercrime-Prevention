@@ -1,16 +1,20 @@
 """Image deepfake analysis.
 
 Heuristic engine (works without a model): Error Level Analysis (ELA) + color
-statistics + metadata forensics.
+statistics + metadata forensics + face/eye/lighting analysis (OpenCV when
+available) + multi-model ensemble + XAI reasons + trust score + heatmap.
 """
 import hashlib
 import io
 import os
-import random
 import time
 
 from PIL import Image, ImageChops, ImageStat
 from PIL.ExifTags import TAGS
+
+from config import Config
+from services.ensemble import (build_models, explain_short, reasons_from_features,
+                               risk_label, trust_score)
 
 
 def _average_hash(image, hash_size=16):
@@ -34,6 +38,78 @@ def _error_level_analysis(image, quality=90):
     return rms, diff
 
 
+def _save_heatmap(diff, seed_hex):
+    """Persist a heatmap PNG (red = manipulated regions) and return its name."""
+    try:
+        import numpy as np
+        gray = np.asarray(diff.convert("L"), dtype=np.float32)
+        spread = gray.ptp()
+        norm = (gray - gray.min()) / spread if spread > 1e-6 else np.zeros_like(gray)
+        heat = np.zeros((norm.shape[0], norm.shape[1], 3), dtype=np.uint8)
+        heat[:, :, 0] = (norm * 255).astype(np.uint8)       # red channel
+        heat[:, :, 1] = ((1 - norm) * 120).astype(np.uint8)  # muted green
+        from PIL import Image as _Img
+        os.makedirs(Config.HEATMAP_FOLDER, exist_ok=True)
+        name = f"heat_{seed_hex[:10]}.png"
+        _Img.fromarray(heat).save(os.path.join(Config.HEATMAP_FOLDER, name))
+        return name
+    except Exception:
+        return ""
+
+
+def _face_analysis(path):
+    """OpenCV Haar-cascade face/eye/lighting heuristics. Best-effort."""
+    out = {
+        "faces_detected": 0,
+        "face_consistency": 0.5,
+        "eye_blink_pattern": 0.5,
+        "lighting_consistency": 0.5,
+        "face_areas": [],
+    }
+    try:
+        import cv2
+        img = cv2.imread(path)
+        if img is None:
+            return out
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        eye_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_eye.xml")
+        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(40, 40))
+        out["faces_detected"] = int(len(faces))
+        if len(faces) == 0:
+            return out
+
+        eyes_total = 0
+        lighting_diffs = []
+        for (x, y, w, h) in faces[:4]:
+            face_gray = gray[y:y + h, x:x + w]
+            eyes = eye_cascade.detectMultiScale(face_gray, 1.1, 5, minSize=(8, 8))
+            eyes_total += len(eyes)
+            # Lighting consistency: compare left vs right half of the face.
+            mid = w // 2
+            left = float(face_gray[:, :mid].mean())
+            right = float(face_gray[:, mid:].mean())
+            lighting_diffs.append(abs(left - right) / 128.0)
+            out["face_areas"].append({"x": int(x), "y": int(y), "w": int(w), "h": int(h),
+                                      "eyes": int(len(eyes))})
+
+        expected_eyes = min(len(faces) * 2, 8)
+        eye_ratio = min(1.0, eyes_total / max(1, expected_eyes))
+        out["eye_blink_pattern"] = round(min(1.0, max(0.0, eye_ratio)), 4)
+        light = sum(lighting_diffs) / len(lighting_diffs)
+        out["lighting_consistency"] = round(min(1.0, max(0.0, 1.0 - light)), 4)
+        # A generated face often has 0 eyes detected (uncanny gaps).
+        if eyes_total == 0:
+            out["face_consistency"] = 0.2
+        else:
+            out["face_consistency"] = round(min(1.0, 0.5 + eye_ratio * 0.5), 4)
+    except Exception:
+        pass
+    return out
+
+
 def _extract_metadata(path):
     """Collect EXIF/IPTC metadata for forensic checks."""
     meta = {}
@@ -52,10 +128,45 @@ def _extract_metadata(path):
     return meta
 
 
-def _random_noise(seed_bytes):
-    """Deterministic pseudo-random drift so identical runs stay stable per file."""
-    rng = random.Random(int.from_bytes(seed_bytes, "big"))
-    return rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(0, 2)
+def _sha256(path):
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+
+def feature_vector(image):
+    """Compute the shared numeric feature dict from an RGB PIL image.
+
+    Used both by ``analyze_image`` and by the Kaggle reference scorer, so a
+    scanned frame and a Kaggle sample are measured identically. Returns the
+    features that need no file metadata (face/EXIF checks are applied on top
+    by the full pipeline).
+    """
+    # hash of a heavily re-compressed copy => similarity score
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=50)
+    buf.seek(0)
+    h_original = _average_hash(image)
+    h_recomp = _average_hash(Image.open(buf).convert("RGB"))
+    similarity = 1.0 - bin(h_original ^ h_recomp).count("1") / (16 * 16)
+
+    stat = ImageStat.Stat(image)
+    mean_rgb = stat.mean
+    stddev = sum(stat.stddev) / 3.0
+
+    ela_rms, _diff = _error_level_analysis(image)
+    return {
+        "error_level_analysis": round(max(0.0, min(1.0, ela_rms / 14.0)), 4),
+        "texture_uniformity": round(max(0.0, min(1.0, (1.0 - stddev / 70.0))), 4),
+        "recompression_similarity": round(max(0.0, min(1.0, (similarity - 0.6) / 0.4)), 4),
+        "color_flatness": round(max(0.0, min(1.0, (120.0 - (sum(mean_rgb) / 3.0)) / 120.0)), 4),
+        "histogram_entropy": round(_entropy(image.histogram()), 3),
+    }
 
 
 def analyze_image(file_path, filename, size_bytes):
@@ -69,37 +180,35 @@ def analyze_image(file_path, filename, size_bytes):
         except Exception:
             return _pack_failure("Unsupported or corrupted image file.")
 
-        ela_rms, diff = _error_level_analysis(img)
-        h_original = _average_hash(img)
-
-        # hash of a heavily re-compressed copy => similarity score
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=50)
-        buf.seek(0)
-        h_recomp = _average_hash(Image.open(buf).convert("RGB"))
-        similarity = 1.0 - bin(h_original ^ h_recomp).count("1") / (16 * 16)
-
-        # color / detail statistics
-        stat = ImageStat.Stat(img)
-        mean_rgb = stat.mean
-        stddev = sum(stat.stddev) / 3.0
-        histogram_entropy = _entropy(img.histogram())
+        _ela_rms, diff = _error_level_analysis(img)
+        shared = feature_vector(img)
 
     meta = _extract_metadata(file_path)
-    seed = hashlib.sha256(open(file_path, "rb").read()[:65536]).digest()
-    noise, noise2, _ = _random_noise(seed)
+    file_hash = _sha256(file_path)
+    seed_hex = file_hash or hashlib.sha256(open(file_path, "rb").read()[:65536]).hexdigest()
+    heatmap_name = _save_heatmap(diff, seed_hex)
+    face = _face_analysis(file_path)
 
     # -------------------------- heuristic scoring -------------------------- #
     # 1) ELA: genuine photos usually show low localised recompression error.
-    ela_score = max(0.0, min(1.0, ela_rms / 14.0))
+    ela_score = shared["error_level_analysis"]
     # 2) Overly smooth / uniform images are common in generated faces.
-    texture_score = max(0.0, min(1.0, (1.0 - stddev / 70.0)))
+    texture_score = shared["texture_uniformity"]
     # 3) Missing or stripped metadata raises suspicion for some types.
     meta_score = 0.0 if meta.get("has_exif") else 0.35
     # 4) Near-lossless recompression similarity too high => possible synthetic.
-    recomp_score = max(0.0, min(1.0, (similarity - 0.6) / 0.4))
+    recomp_score = shared["recompression_similarity"]
     # 5) Low color variance (flat / uncanny) bias.
-    flatness = max(0.0, min(1.0, (120.0 - (sum(mean_rgb) / 3.0)) / 120.0))
+    flatness = shared["color_flatness"]
+    # 6) Face heuristics (when a face is present).
+    if face["faces_detected"]:
+        face_score = (1.0 - face["face_consistency"]) * 0.6 + (1.0 - face["eye_blink_pattern"]) * 0.4
+        lighting_score = 1.0 - face["lighting_consistency"]
+        face_weight = 0.12
+    else:
+        face_score = 0.0
+        lighting_score = 0.0
+        face_weight = 0.0
 
     features = {
         "error_level_analysis": round(ela_score, 4),
@@ -107,22 +216,52 @@ def analyze_image(file_path, filename, size_bytes):
         "metadata_anomaly": round(meta_score, 4),
         "recompression_similarity": round(recomp_score, 4),
         "color_flatness": round(flatness, 4),
-        "histogram_entropy": round(histogram_entropy, 4),
+        "histogram_entropy": round(shared["histogram_entropy"], 3),
+        "face_consistency": round(face["face_consistency"], 4),
+        "eye_blink_pattern": round(face["eye_blink_pattern"], 4),
+        "lighting_consistency": round(face["lighting_consistency"], 4),
+        "faces_detected": face["faces_detected"],
         "resolution": f"{img.width}x{img.height}",
     }
 
-    # Ensemble: weighted + tiny per-file deterministic noise
-    fake_probability = (
-        0.30 * ela_score
-        + 0.22 * texture_score
-        + 0.18 * recomp_score
-        + 0.15 * meta_score
-        + 0.15 * flatness
-    ) * 100
-    fake_probability = max(5.0, min(95.0, fake_probability + noise))
+    base = (
+        0.28 * ela_score
+        + 0.20 * texture_score
+        + 0.16 * recomp_score
+        + 0.14 * meta_score
+        + 0.14 * flatness
+        + 0.08 * face_score
+    )
+    base = max(0.0, min(1.0, base + (lighting_score * 0.03 if face_weight else 0.0)))
 
-    result, risk = _interpret(fake_probability)
-    explanation = _explain_image(result, fake_probability, features)
+    # ----------------------- Kaggle reference blend ------------------------ #
+    # Score the same features against the real-vs-fake distributions pulled
+    # from Kaggle (in-process profile, built once). Boosts the confidence of
+    # the heuristic verdict when the Kaggle reference agrees.
+    kaggle_info = None
+    try:
+        from services.kaggle_reference import kaggle_reference
+        kaggle_reference.ensure_built()
+        kaggle_info = kaggle_reference.score(shared)
+        if kaggle_info and kaggle_info.get("status") == "ready":
+            ref_likelihood = kaggle_info["fake_likelihood"]
+            base = max(0.0, min(1.0, 0.75 * base + 0.25 * ref_likelihood))
+    except Exception:  # noqa: BLE001
+        kaggle_info = None
+
+    models, fake_probability = build_models("image", base * 100, filename, spread=4.0)
+    result, _risk = _interpret(fake_probability)
+    risk = risk_label(fake_probability)
+    reasons = reasons_from_features("image", features, fake_probability)
+    factors = {
+        "metadata": 1.0 - meta_score,
+        "ai_artifacts": 1.0 - ela_score,
+        "compression": 1.0 - recomp_score,
+        "face_consistency": face["face_consistency"],
+        "noise": 1.0 - texture_score,
+    }
+    trust = trust_score(fake_probability, factors)
+    explanation = explain_short("image", result, fake_probability)
     recommendations = _recommendations(result)
 
     elapsed = int((time.time() - start) * 1000)
@@ -132,14 +271,22 @@ def analyze_image(file_path, filename, size_bytes):
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
         "fake_probability": round(fake_probability, 1),
+        "trust_score": trust,
         "risk_level": risk,
         "explanation": explanation,
         "recommendations": recommendations,
         "processing_time_ms": elapsed,
-        "metadata": {k: v for k, v in list(meta.items())[:25]},
+        "metadata": {**{k: v for k, v in list(meta.items())[:25]},
+                     "file_hash_sha256": file_hash},
         "features": features,
+        "models": models,
+        "reasons": reasons,
+        "file_hash": file_hash,
+        "face_analysis": face,
+        "heatmap_file": heatmap_name,
         "model": "heuristic-vision-v1",
         "heatmap_available": True,
+        "kaggle_reference": kaggle_info,
         "verified": False,
     }
 
@@ -163,17 +310,6 @@ def _interpret(prob):
     if prob >= 45:
         return "inconclusive", "medium"
     return "authentic", "low"
-
-
-def _explain_image(result, prob, f):
-    head = ("The model classifies this image as AI-generated or manipulated. " if result == "fake"
-            else "The model finds this image consistent with an authentic capture. ")
-    detail = (
-        f"Error-level analysis scored {f['error_level_analysis']:.0%}, texture uniformity "
-        f"{f['texture_uniformity']:.0%}, recompression similarity {f['recompression_similarity']:.0%}, "
-        f"metadata anomaly {f['metadata_anomaly']:.0%}. The overall AI probability is {prob:.1f}%."
-    )
-    return head + detail
 
 
 def _recommendations(result):

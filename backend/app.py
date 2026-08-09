@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, jsonify
 from flask_cors import CORS
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from config import Config
@@ -18,8 +19,11 @@ from models import ActiveSession, User
 from routes.admin import admin_bp
 from routes.analytics import analytics_bp
 from routes.auth import auth_bp
+from routes.chat import chat_bp
 from routes.detection import detect_bp
+from routes.evidence import evidence_bp
 from routes.history import history_bp
+from routes.keys import keys_bp
 from routes.reports import reports_bp
 
 
@@ -54,15 +58,71 @@ def create_app(config_class=Config):
     # --- Revoked-session check: a JWT is rejected (401) as soon as its
     # ActiveSession row is deactivated, e.g. by a newer login somewhere else
     # or by logout. This is what makes the kicked-out device fail immediately.
+    # It also tracks activity (last_seen_at) and enforces the inactivity
+    # timeout, so the backend is the single source of truth for session state.
     @jwt.token_in_blocklist_loader
     def check_session_revoked(_jwt_header, jwt_payload):
         jti = jwt_payload.get("jti")
         if not jti:
             return True
         session = ActiveSession.query.filter_by(jti=jti).first()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if not session or not session.is_active:
             return True
-        return session.expires_at < datetime.now(timezone.utc).replace(tzinfo=None)
+        if session.expires_at < now:
+            return True
+        # Inactivity timeout: if the user hasn't made an authenticated request
+        # for SESSION_INACTIVITY_MINUTES, treat the session as stale.
+        inactivity = Config.SESSION_INACTIVITY_MINUTES
+        if inactivity and session.last_seen_at:
+            idle = (now - session.last_seen_at).total_seconds()
+            if idle > inactivity * 60:
+                session.is_active = False
+                session.revoked_reason = "inactivity"
+                db.session.commit()
+                return True
+        # The token is valid: refresh the activity timestamp. The SSE stream is
+        # a single long-lived request, so this runs once at connect time and
+        # does not keep idle tabs alive forever.
+        session.last_seen_at = now
+        db.session.commit()
+        return False
+
+    # --- JWT error loaders: every 401 uses {"success": false, "message": ...}
+    # so the frontend can reliably detect "kicked out" vs "not logged in". ---
+    @jwt.unauthorized_loader
+    def missing_token(reason):
+        return jsonify({"success": False,
+                        "message": "Authentication required. Please log in."}), 401
+
+    @jwt.invalid_token_loader
+    def invalid_token(reason):
+        return jsonify({"success": False,
+                        "message": "Your session is no longer valid. Please log in again."}), 401
+
+    @jwt.expired_token_loader
+    def expired_token(_jwt_header, jwt_payload):
+        return jsonify({"success": False,
+                        "message": "Your session has expired. Please log in again."}), 401
+
+    @jwt.revoked_token_loader
+    def revoked_token(_jwt_header, jwt_payload):
+        # The only way a token is revoked is that its ActiveSession row was
+        # deactivated - which happens when the same account logs in elsewhere.
+        jti = jwt_payload.get("jti")
+        reason = "superseded"
+        if jti:
+            session = ActiveSession.query.filter_by(jti=jti).first()
+            if session and session.revoked_reason:
+                reason = session.revoked_reason
+        if reason == "inactivity":
+            message = "Your session expired due to inactivity. Please log in again."
+        elif reason == "logout":
+            message = "You have been logged out."
+        else:
+            message = ("Your account was logged in from another device. "
+                       "You have been logged out.")
+        return jsonify({"success": False, "message": message}), 401
 
     # --- Blueprints ---
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -71,6 +131,9 @@ def create_app(config_class=Config):
     app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
+    app.register_blueprint(chat_bp, url_prefix="/api/chat")
+    app.register_blueprint(evidence_bp, url_prefix="/api/evidence")
+    app.register_blueprint(keys_bp, url_prefix="/api")
 
     @app.get("/")
     def root():
@@ -96,18 +159,35 @@ def create_app(config_class=Config):
                          "POST /api/auth/resend-otp",
                          "POST /api/auth/forgot-password", "POST /api/auth/reset-password",
                          "GET /api/auth/me", "PUT /api/auth/profile",
-                         "POST /api/auth/change-password"],
+                         "POST /api/auth/change-password",
+                         "POST /api/auth/logout",
+                         "GET /api/auth/events (SSE - real-time logout)",
+                         "NOTE: single active session per account - a new login revokes older sessions (401)"],
                 "detection": ["POST /api/detect/image", "POST /api/detect/video",
                               "POST /api/detect/audio", "POST /api/detect/text",
+                              "POST /api/detect/email (phishing scanner)",
+                              "POST /api/detect/post (image + caption / fake news)",
+                              "POST /api/detect/realtime (webcam frame, not stored)",
                               "POST /api/detect/url (analyze media from a remote URL)"],
                 "history": ["GET /api/history", "GET /api/history/stats",
                             "GET /api/history/<id>", "DELETE /api/history/<id>"],
                 "analytics": ["GET /api/analytics/overview", "GET /api/analytics/daily",
                               "GET /api/analytics/weekly", "GET /api/analytics/fake-vs-real",
                               "GET /api/analytics/by-type", "GET /api/analytics/activity",
-                              "GET /api/analytics/accuracy-trend"],
+                              "GET /api/analytics/accuracy-trend",
+                              "GET /api/analytics/deepfake-types (leaderboard)",
+                              "GET /api/analytics/org-dashboard (organisation view)"],
                 "reports": ["GET /api/reports/<scan_id>/pdf", "GET /api/reports/<scan_id>/csv",
-                            "GET /api/reports/<scan_id>/qr"],
+                            "GET /api/reports/<scan_id>/qr",
+                            "GET /api/reports/<scan_id>/heatmap (XAI manipulation map)"],
+                "evidence": ["POST /api/evidence/<scan_id>/register (case + blockchain anchor)",
+                             "GET /api/evidence/cases", "GET /api/evidence/chain",
+                             "GET /api/evidence/verify/<scan_id>",
+                             "POST /api/evidence/<case_id>/status"],
+                "chat": ["POST /api/chat (deepfake awareness assistant)",
+                         "GET /api/chat/suggestions"],
+                "keys": ["GET /api/keys", "POST /api/keys (browser-extension API key)",
+                         "DELETE /api/keys/<id>", "POST /api/extend/analyze"],
                 "admin": ["GET /api/admin/stats", "GET /api/admin/users",
                           "DELETE /api/admin/users/<id>", "POST /api/admin/users/<id>/toggle-admin",
                           "GET /api/admin/logs", "GET /api/admin/health",
@@ -132,9 +212,10 @@ def create_app(config_class=Config):
     def server_error(_):
         return jsonify({"message": "Internal server error."}), 500
 
-    # --- DB bootstrap + default admin ---
+    # --- DB bootstrap + default admin + schema migration + upkeep ---
     with app.app_context():
         db.create_all()
+        _migrate_schema(app)
         admin = User.query.filter_by(username=Config.ADMIN_USERNAME).first()
         if not admin:
             admin = User(
@@ -147,6 +228,7 @@ def create_app(config_class=Config):
             )
             db.session.add(admin)
             db.session.commit()
+        _purge_stale_uploads(app)
 
     # --- Kaggle credential check (data is fetched on-demand during training,
     # never downloaded at startup) ---
@@ -163,7 +245,75 @@ def create_app(config_class=Config):
 
         threading.Thread(target=_check_creds, daemon=True).start()
 
+    # --- Kaggle reference profile (background, best-effort) ---
+    # On the first scan the profile is built lazily; pre-empting it here means
+    # the Live Webcam Check / URL scan already have it ready on first frame.
+    if Config.KAGGLE_REFERENCE_ENABLED:
+        from services.kaggle_reference import kaggle_reference
+        import threading
+
+        threading.Thread(target=kaggle_reference.ensure_built, daemon=True).start()
+
     return app
+
+
+def _migrate_schema(app):
+    """Add newly introduced columns to pre-existing tables (SQLite-safe)."""
+    try:
+        insp = db.inspect(db.engine)
+        cols = {c["name"] for c in insp.get_columns("scan_history")}
+        adds = []
+        if "trust_score" not in cols:
+            adds.append("ALTER TABLE scan_history ADD COLUMN trust_score FLOAT DEFAULT 0")
+        if "file_hash" not in cols:
+            adds.append("ALTER TABLE scan_history ADD COLUMN file_hash VARCHAR(64) DEFAULT ''")
+        if "models" not in cols:
+            adds.append("ALTER TABLE scan_history ADD COLUMN models JSON")
+        if "reasons" not in cols:
+            adds.append("ALTER TABLE scan_history ADD COLUMN reasons JSON")
+        for stmt in adds:
+            db.session.execute(text(stmt))
+        if adds:
+            db.session.commit()
+            app.logger.info("Applied schema migration: %d new columns", len(adds))
+        key_cols = {c["name"] for c in insp.get_columns("api_keys")}
+        if "key_encrypted" not in key_cols:
+            db.session.execute(text("ALTER TABLE api_keys ADD COLUMN key_encrypted TEXT"))
+            db.session.commit()
+            app.logger.info("Applied schema migration: api_keys.key_encrypted")
+        sess_cols = {c["name"] for c in insp.get_columns("active_sessions")}
+        sess_adds = []
+        if "user_agent" not in sess_cols:
+            sess_adds.append("ALTER TABLE active_sessions ADD COLUMN user_agent VARCHAR(255) DEFAULT ''")
+        if "revoked_reason" not in sess_cols:
+            sess_adds.append("ALTER TABLE active_sessions ADD COLUMN revoked_reason VARCHAR(32)")
+        for stmt in sess_adds:
+            db.session.execute(text(stmt))
+        if sess_adds:
+            db.session.commit()
+            app.logger.info("Applied schema migration: active_sessions %d new columns", len(sess_adds))
+    except Exception as exc:  # noqa: BLE001
+        app.logger.warning("Schema migration skipped: %s", exc)
+
+
+def _purge_stale_uploads(app):
+    """Delete uploaded media older than the retention window to limit disk usage."""
+    try:
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None).timestamp() - \
+            Config.UPLOAD_RETENTION_DAYS * 86400
+        removed = 0
+        for name in os.listdir(Config.UPLOAD_FOLDER):
+            path = os.path.join(Config.UPLOAD_FOLDER, name)
+            try:
+                if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                    os.remove(path)
+                    removed += 1
+            except OSError:
+                continue
+        if removed:
+            app.logger.info("Purged %d stale upload files", removed)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.warning("Upload purge skipped: %s", exc)
 
 
 app = create_app()

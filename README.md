@@ -29,6 +29,18 @@ learning center for deepfake awareness.
   Kaggle on-demand**, extracted to a temp cache, used, then the temp cache is
   auto-deleted. Nothing is stored in the project. No model training is performed.
 - **Results page** — Authentic/Fake badge, confidence meter, risk level, XAI explanation, feature importances, recommendations, PDF/CSV/QR downloads
+- **Multi-model ensemble** — per-model verdict table (CNN / Transformer / CLIP / Audio / N-gram) plus a 0-100 evidence trust score on every result
+- **Explainable AI checklist** — pass/fail detection reasons (metadata, ELA, compression, noise, face consistency, network age…) shown on results and in the PDF
+- **Manipulation heatmap** — red-region visualisation of AI-altered areas for images (`GET /api/reports/<id>/heatmap`)
+- **Blockchain evidence ledger** — report a detected deepfake as a cybercrime case (ID like `DF-2026-0001`), anchoring file hash + report hash into a chained SHA-256 ledger; verify integrity any time (`/api/evidence/*`)
+- **Live webcam detection** — `/detect/realtime` streams frames for a live fake-confidence gauge (frames never persisted)
+- **Email & phishing scanner** — `/detect/email` scores urgency, links, sender-reply mismatch and AI-written wording
+- **Social post detection** — `/detect/social` analyses an image and its caption together (image + text pipeline)
+- **AI assistant chatbot** — `/api/chat` knowledge base (deepfakes, scams, cyber laws, tool guidance) + floating chat widget
+- **Organisation dashboard** — `/api/analytics/org-dashboard` risk distribution, threat sources, flagged-rate + CSV export (`/api/analytics/org/export`); admins see global stats
+- **Deepfake-type leaderboard** — `/api/analytics/deepfake-types` blends user scan mix with public baseline distribution
+- **Browser extension prototype** — `/extension` Manifest V3 extension: right-click any image to check it, inline badges, popup (uses per-user API keys from `/api/keys`)
+- **API keys** — `/api/keys` create/revoke keys (SHA-256 hashed, shown once) for the browser extension / external tooling
 - **History** — search, filter by type/result, paginate, delete, re-download
 - **Analytics** — Chart.js dashboards: daily, weekly, fake-vs-real, by-type, accuracy trend
 - **Admin panel** — system stats, user management, logs, model performance, health
@@ -63,24 +75,32 @@ deepfake-detection/
 │   ├── models.py                 # Users, ScanHistory, AIPrediction, Report, Log
 │   ├── requirements.txt          # Core dependencies
 │   ├── requirements-ai.txt       # Optional AI/model dependencies
-│   ├── smoke_test.py             # End-to-end API test (34 checks)
+│   ├── smoke_test.py             # End-to-end API test (39 checks)
 │   ├── .env.example              # Environment variables template
 │   ├── ml/                       # Kaggle data subsystem (no model training)
 │   │   ├── data_config.py        # Dataset registry (Kaggle slugs per media type)
 │   │   ├── kaggle_pipeline.py    # On-demand Kaggle fetch (temp cache, auto-clean)
 │   ├── routes/
 │   │   ├── auth.py               # /api/auth/*        (register, login, profile)
-│   │   ├── detection.py          # /api/detect/*      (image, video, audio, text)
+│   │   ├── detection.py          # /api/detect/*      (image, video, audio, text, email, social, realtime, url)
 │   │   ├── history.py            # /api/history/*     (list, stats, delete)
-│   │   ├── analytics.py          # /api/analytics/*   (charts data)
-│   │   ├── reports.py            # /api/reports/*     (pdf, csv, qr)
-│   │   └── admin.py              # /api/admin/*       (users, logs, health)
+│   │   ├── analytics.py          # /api/analytics/*   (charts + org dashboard + deepfake types)
+│   │   ├── reports.py            # /api/reports/*     (pdf, csv, qr, heatmap)
+│   │   ├── evidence.py           # /api/evidence/*    (cybercrime cases + blockchain ledger)
+│   │   ├── keys.py               # /api/keys + /api/extend/analyze (API keys)
+│   │   ├── chat.py               # /api/chat          (AI assistant)
+│   │   ├── admin.py              # /api/admin/*       (users, logs, health)
 │   ├── services/
-│   │   ├── ai_service.py         # Orchestrator (heuristic engines)
-│   │   ├── analyze_image.py      # ELA + metadata heuristics
+│   │   ├── ai_service.py         # Orchestrator (heuristic engines + ensemble)
+│   │   ├── ensemble.py           # Multi-model verdicts, trust score, XAI reasons
+│   │   ├── blockchain.py         # SHA-256 evidence ledger + verification
+│   │   ├── analyze_image.py      # ELA + metadata heuristics + heatmap
 │   │   ├── analyze_video.py      # frame + face + temporal heuristics
 │   │   ├── analyze_audio.py      # spectral / MFCC heuristics
-│   │   └── analyze_text.py       # perplexity / burstiness heuristics
+│   │   ├── analyze_text.py       # perplexity / burstiness heuristics
+│   │   ├── analyze_email.py      # phishing heuristics
+│   │   ├── analyze_post.py       # image + caption social detection
+│   │   └── pdf_evidence.py       # case PDF generation + email
 │   ├── utils/
 │   │   ├── security.py           # rate limiter, file validation, sanitizers
 │   │   ├── idps.py               # intrusion detection & prevention (IP lockout, audit trail)
@@ -100,11 +120,21 @@ deepfake-detection/
         ├── api/api.js            # Axios client (JWT interceptor)
         ├── context/              # ThemeContext, AuthContext, LanguageContext
         ├── components/           # Navbar, Footer, ParticleBackground, FileUpload,
-        │                         # ResultBadge, ConfidenceBar, ScanLoader, charts, guards…
+        │                         # ResultBadge, ConfidenceBar, ScanLoader, TrustScore,
+        │                         # ConfidenceGauge, MultiModelVerdicts, XaiReasons,
+        │                         # DeepfakeTimeline, PipelineViz, Chatbot, Leaderboard, guards…
         ├── pages/                # Home, Login, Register, Dashboard, 4 Detectors,
-        │                         # Results, History, Analytics, LearningCenter,
-        │                         # About, Contact, Admin, Profile, ApiDocs, NotFound
+        │                         # RealtimeCam, EmailDetection, SocialPostDetection,
+        │                         # Evidence, OrgDashboard, Results, History, Analytics,
+        │                         # LearningCenter, About, Contact, Admin, Profile, ApiDocs
         └── utils/format.js       # size / date / risk formatters
+
+└── extension/                    # Browser extension prototype (Manifest V3)
+    ├── manifest.json
+    ├── background.js             # context menu -> /api/extend/analyze
+    ├── content.js                # inline AI badges on scanned images
+    ├── popup.html / popup.js     # save API key + quick URL check
+    └── icons/                    # 16/48/128 PNG icons
 ```
 
 ---
@@ -167,14 +197,28 @@ Base URL: `http://localhost:5000/api` — all protected endpoints require
 | POST   | `/detect/audio`                | Upload audio → verdict               |
 | POST   | `/detect/text`                 | Submit text → verdict                |
 | POST   | `/detect/url`                  | Analyze media from a remote URL      |
+| POST   | `/detect/email`                | Phishing / AI-written email scan     |
+| POST   | `/detect/social`               | Image + caption social post scan     |
+| POST   | `/detect/realtime`             | Live webcam frame check (not stored) |
 | GET    | `/history`                     | List scans (q/type/result/page)      |
 | GET    | `/history/stats`               | Dashboard summary                    |
 | GET    | `/history/<id>`                | Scan detail (with XAI payload)       |
 | DELETE | `/history/<id>`                | Delete scan                          |
-| GET    | `/analytics/*`                 | overview, daily, weekly, fake-vs-real, by-type, activity, accuracy-trend |
+| GET    | `/analytics/*`                 | overview, daily, weekly, fake-vs-real, by-type, activity, accuracy-trend, deepfake-types, org-dashboard, org/export |
 | GET    | `/reports/<id>/pdf`            | Download PDF report                  |
 | GET    | `/reports/<id>/csv`            | Export CSV report                    |
 | GET    | `/reports/<id>/qr`             | QR verification image                |
+| GET    | `/reports/<id>/heatmap`        | Manipulation heatmap image           |
+| POST   | `/evidence/<id>/register`      | Report scan as cybercrime case + blockchain anchor |
+| GET    | `/evidence/cases`              | List your reported cases             |
+| GET    | `/evidence/verify/<id>`        | Verify a scan's blockchain anchor    |
+| GET    | `/evidence/chain`              | Chain integrity + block summary      |
+| POST   | `/evidence/<case_id>/status`   | Update case status                   |
+| POST   | `/keys`                        | Create API key (returned once)       |
+| GET    | `/keys`                        | List API keys                        |
+| DELETE | `/keys/<id>`                   | Revoke API key                       |
+| POST   | `/extend/analyze`              | Extension image check (API key auth) |
+| POST   | `/chat`                        | AI assistant knowledge-base reply    |
 | GET    | `/admin/stats`                 | System stats (admin)                 |
 | GET    | `/admin/users`                 | List users (admin)                   |
 | DELETE | `/admin/users/<id>`            | Delete user (admin)                  |
@@ -220,6 +264,23 @@ python -m ml.kaggle_pipeline --list     # show configured datasets
 Each `--kaggle` fetch downloads the dataset **directly from Kaggle into a temp
 cache, extracts it, is used, then the cache is deleted** — nothing is stored in
 the project. Set `KAGGLE_AUTOSYNC=true` to auto-sync datasets at backend startup.
+
+### 3) Live-scan reference comparison (real-time webcam / URL / extension)
+
+When `KAGGLE_REFERENCE_ENABLED=true` (default), the first image scan pulls a
+small sample of **real + fake images straight from Kaggle into a temp cache
+(auto-deleted)**, builds per-class feature distributions in-process, and every
+later scan — Live Webcam Check (`/detect/realtime`), URL scan (`/detect/url`)
+and the browser extension (`/extend/analyze`) — is scored against those
+distributions. The reference **blends 25% into the heuristic verdict** and is
+reported in every result as `kaggle_reference` / `kaggle_reference_status`.
+
+- Build runs once in the background at startup (or lazily on first scan) and is
+  cached in-process — the live stream never re-downloads.
+- Tune with `KAGGLE_REFERENCE_SAMPLE_SIZE` (default 10 per class) or disable
+  with `KAGGLE_REFERENCE_ENABLED=false`.
+- Raw dataset files never persist: only the derived in-memory statistics live
+  for the life of the process.
 
 ### Available datasets (configurable in `ml/data_config.py`)
 
@@ -332,7 +393,7 @@ history, analytics, reports, admin):
 
 ```bash
 cd backend
-python smoke_test.py        # expects 34 PASS, 0 FAIL
+python smoke_test.py        # expects 39 PASS, 0 FAIL
 ```
 
 Frontend:

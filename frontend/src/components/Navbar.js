@@ -12,6 +12,9 @@ import {
   ClockIcon,
   BeakerIcon,
   ShieldExclamationIcon,
+  VideoCameraIcon,
+  FingerPrintIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
@@ -20,7 +23,10 @@ import { useLanguage } from "../context/LanguageContext";
 const navLinks = [
   { to: "/dashboard", labelKey: "dashboard", icon: ChartBarIcon, protected: true },
   { to: "/detect", label: "Scan", icon: BeakerIcon, protected: true },
+  { to: "/detect/realtime", label: "Live Cam", icon: VideoCameraIcon, protected: true },
   { to: "/history", labelKey: "history", icon: ClockIcon, protected: true },
+  { to: "/evidence", label: "Report Fraud", icon: FingerPrintIcon, protected: true },
+  { to: "/org-dashboard", label: "Org View", icon: BuildingOffice2Icon, protected: true },
 ];
 
 export default function Navbar() {

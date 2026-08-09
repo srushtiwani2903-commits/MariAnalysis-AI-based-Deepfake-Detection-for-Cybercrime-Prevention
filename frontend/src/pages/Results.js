@@ -4,13 +4,20 @@ import { motion } from "framer-motion";
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ClockIcon, DocumentArrowDownIcon,
   ScaleIcon, BeakerIcon, FingerPrintIcon, QrCodeIcon, ShieldCheckIcon,
+  LockClosedIcon, CubeIcon,
 } from "@heroicons/react/24/outline";
 import ResultBadge from "../components/ResultBadge";
 import ConfidenceBar from "../components/ConfidenceBar";
 import GlassCard from "../components/GlassCard";
 import ScanLoader from "../components/ScanLoader";
+import TrustScore from "../components/TrustScore";
+import MultiModelVerdicts from "../components/MultiModelVerdicts";
+import XaiReasons from "../components/XaiReasons";
+import DeepfakeTimeline from "../components/DeepfakeTimeline";
 import api from "../api/api";
 import { formatDate, riskColor, humanSize } from "../utils/format";
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
 export default function Results() {
   const { scanId } = useParams();
@@ -19,6 +26,22 @@ export default function Results() {
   const [full, setFull] = useState(null);
   const [loading, setLoading] = useState(!scan);
   const [downloading, setDownloading] = useState(false);
+  const [proof, setProof] = useState(null);
+  const [proofLoading, setProofLoading] = useState(false);
+  const [proofError, setProofError] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [heatmapUrl, setHeatmapUrl] = useState(null);
+
+  useEffect(() => {
+    if (!scanId) return;
+    let cancelled = false;
+    api.get(`/reports/${scanId}/heatmap`, { responseType: "blob" })
+      .then(({ data }) => {
+        if (!cancelled) setHeatmapUrl(URL.createObjectURL(data));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scanId]);
 
   useEffect(() => {
     if (scan) return;
@@ -34,10 +57,36 @@ export default function Results() {
     }
   }, [scanId, scan]);
 
+  const checkProof = async () => {
+    setProofLoading(true);
+    setProofError("");
+    try {
+      const { data } = await api.get(`/evidence/verify/${scanId}`);
+      setProof(data);
+    } catch (e) {
+      setProofError(e.response?.data?.message || e.message);
+    } finally {
+      setProofLoading(false);
+    }
+  };
+
+  const registerCase = async () => {
+    setRegistering(true);
+    setProofError("");
+    try {
+      const { data } = await api.post(`/evidence/${scanId}/register`);
+      setProof({ registered: true, block: data.block, chain_valid: data.chain_valid, intact: true, case_id: data.case?.case_id });
+    } catch (e) {
+      setProofError(e.response?.data?.message || e.message);
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   const download = (fmt) => {
     setDownloading(true);
     const token = localStorage.getItem("deepguard-token");
-    fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000/api"}/reports/${scanId}/${fmt}`, {
+    fetch(`${API_URL}/reports/${scanId}/${fmt}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.blob())
@@ -63,6 +112,9 @@ export default function Results() {
 
   const features = full?.model?.features || scan.features || {};
   const sections = full?.suspicious_sections || scan.suspicious_sections || [];
+  const models = full?.models || scan.models || [];
+  const reasons = full?.reasons || scan.reasons || [];
+  const heatmapFile = full?.scan_metadata?.heatmap_file || scan.scan_metadata?.heatmap_file;
   const summary = `${scan.result} ${scan.filename} confidence ${Math.round(scan.confidence)}% fake probability ${Math.round(scan.fake_probability)}%. ${scan.explanation || ""}`;
 
   return (
@@ -120,6 +172,26 @@ export default function Results() {
           </div>
         </div>
 
+        {/* Trust score + heatmap strip */}
+        <div className="mt-8 grid lg:grid-cols-2 gap-6 pt-6 border-t border-slate-200 dark:border-white/10">
+          <TrustScore value={full?.trust_score ?? scan.trust_score} />
+          {heatmapFile && heatmapUrl && (
+            <div className="flex items-center gap-4">
+              <img
+                src={heatmapUrl}
+                alt="Manipulation heatmap"
+                className="w-24 h-24 rounded-xl object-cover border border-slate-200 dark:border-white/10"
+              />
+              <div>
+                <p className="text-sm font-semibold">Manipulation Heatmap</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Red regions mark the areas most likely to have been altered by AI generation.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Download bar */}
         <div className="mt-8 flex flex-wrap gap-3 pt-6 border-t border-slate-200 dark:border-white/10">
           <button onClick={() => download("pdf")} disabled={downloading} className="btn-primary">
@@ -131,7 +203,34 @@ export default function Results() {
           <button onClick={() => download("qr")} disabled={downloading} className="btn-secondary">
             <QrCodeIcon className="w-5 h-5" /> QR Code
           </button>
+          <button onClick={checkProof} disabled={proofLoading} className="btn-secondary">
+            <LockClosedIcon className="w-5 h-5" /> {proofLoading ? "Checking…" : proof ? "Re-verify" : "Verify Proof"}
+          </button>
         </div>
+
+        {/* Blockchain proof */}
+        {(proof || proofError) && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-sm">
+        {proofError && <p className="text-rose-400">{proofError}</p>}
+        {proof && (
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
+            <span className="flex items-center gap-1.5"><CubeIcon className="w-4 h-4 text-emerald-400" />
+              Block #{proof.block?.index ?? proof.block_index ?? "—"}</span>
+            <span>Status: <b className={proof.intact ? "text-emerald-400" : "text-rose-400"}>
+              {proof.intact ? "TAMPER-EVIDENT ✓" : "INVALID"}
+            </b></span>
+            <span className="font-mono text-slate-500 dark:text-slate-400">hash: {(proof.block?.hash || "").slice(0, 24)}…</span>
+            {(proof.block?.case_id || proof.case_id) && <span>Case: <b>{(proof.block?.case_id || proof.case_id)}</b></span>}
+          </div>
+        )}
+          </motion.div>
+        )}
+        {!proof && !proofError && (
+          <button onClick={registerCase} disabled={registering} className="mt-4 text-xs text-emerald-400 hover:underline">
+            {registering ? "Anchoring to blockchain…" : "No blockchain proof yet — anchor this scan to the evidence ledger (generates a case ID)"}
+          </button>
+        )}
       </motion.div>
 
       {/* XAI explanation */}
@@ -141,6 +240,17 @@ export default function Results() {
             <ScaleIcon className="w-5 h-5 text-neon-blue" /> Explainable AI — Why this verdict?
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{scan.explanation}</p>
+
+          <div className="mt-5">
+            <XaiReasons reasons={reasons} />
+          </div>
+
+          {models.length > 0 && (
+            <div className="mt-5">
+              <h3 className="text-sm font-semibold mb-3">Multi-Model Ensemble</h3>
+              <MultiModelVerdicts models={models} />
+            </div>
+          )}
 
           {Object.keys(features).length > 0 && (
             <div className="mt-5">
@@ -212,6 +322,11 @@ export default function Results() {
           <h2 className="font-bold mb-4">
             {scan.scan_type === "text" ? "Suspicious Sentences" : "Timeline Analysis (frames / face presence)"}
           </h2>
+          {scan.scan_type === "video" && sections[0]?.start !== undefined && (
+            <div className="mb-5">
+              <DeepfakeTimeline segments={sections} />
+            </div>
+          )}
           <div className="space-y-2 max-h-80 overflow-y-auto pr-2 no-scrollbar">
             {sections.slice(0, 20).map((s, i) => {
               const score = s.score !== undefined ? s.score * 100 : (s.face ? 70 : 30);

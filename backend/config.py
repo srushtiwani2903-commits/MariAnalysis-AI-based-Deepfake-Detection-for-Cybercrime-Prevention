@@ -15,6 +15,10 @@ class Config:
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", SECRET_KEY)
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=int(os.environ.get("JWT_EXPIRES_HOURS", 2)))
     JWT_ERROR_MESSAGE_KEY = "message"
+    # Single active-session enforcement: after this many minutes without an
+    # authenticated request the session is treated as stale and invalidated.
+    # 0 disables the inactivity timeout (JWT expiry still applies).
+    SESSION_INACTIVITY_MINUTES = int(os.environ.get("SESSION_INACTIVITY_MINUTES", 30))
 
     # --- Database ---
     SQLALCHEMY_DATABASE_URI = os.environ.get(
@@ -26,6 +30,9 @@ class Config:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, os.environ.get("UPLOAD_FOLDER", "uploads"))
     REPORT_FOLDER = os.path.join(BASE_DIR, os.environ.get("REPORT_FOLDER", "reports"))
+    HEATMAP_FOLDER = os.path.join(BASE_DIR, os.environ.get("HEATMAP_FOLDER", "reports/heatmaps"))
+    # Uploaded media is kept for forensic re-download, then auto-purged.
+    UPLOAD_RETENTION_DAYS = int(os.environ.get("UPLOAD_RETENTION_DAYS", 7))
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", 50)) * 1024 * 1024
     ALLOWED_IMAGE = {"png", "jpg", "jpeg", "webp", "bmp", "tiff"}
     ALLOWED_VIDEO = {"mp4", "avi", "mov", "mkv", "webm"}
@@ -46,6 +53,12 @@ class Config:
     KAGGLE_JSON_PATH = os.environ.get("KAGGLE_JSON_PATH", "")
     KAGGLE_AUTOSYNC = os.environ.get("KAGGLE_AUTOSYNC", "false").lower() == "true"
     KAGGLE_FORCE = os.environ.get("KAGGLE_FORCE", "false").lower() == "true"
+    # Kaggle "reference" comparison: on the first scan, a small sample of real +
+    # fake images is pulled directly from Kaggle into a temp cache (auto-deleted),
+    # per-class feature distributions are built in-process, and every later scan is
+    # scored against them. Disable with KAGGLE_REFERENCE_ENABLED=false.
+    KAGGLE_REFERENCE_ENABLED = os.environ.get("KAGGLE_REFERENCE_ENABLED", "true").lower() == "true"
+    KAGGLE_REFERENCE_SAMPLE_SIZE = int(os.environ.get("KAGGLE_REFERENCE_SAMPLE_SIZE", 10))
 
     # --- CORS ---
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
@@ -54,6 +67,13 @@ class Config:
     RATE_LIMIT_ENABLED = os.environ.get("RATE_LIMIT_ENABLED", "true").lower() == "true"
     RATE_LIMIT_REQUESTS = int(os.environ.get("RATE_LIMIT_REQUESTS", 60))
     RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", 60))
+
+    # --- API key protection (defence in depth) ---
+    # Keys are stored as a SHA-256 hash (for lookups/verification) AND as an
+    # encrypted blob (Fernet AES-128) so they are unreadable at rest even if the
+    # database leaks. Set API_KEY_ENCRYPTION_SECRET to a long random value in
+    # production; it defaults to a key derived from SECRET_KEY for convenience.
+    API_KEY_ENCRYPTION_SECRET = os.environ.get("API_KEY_ENCRYPTION_SECRET", "") or SECRET_KEY
 
     # --- Intrusion Detection & Prevention (fail2ban-style) ---
     IDPS_ENABLED = os.environ.get("IDPS_ENABLED", "true").lower() == "true"
@@ -96,5 +116,5 @@ class Config:
 
 
 # Folder setup (run once at import time)
-for folder in (Config.UPLOAD_FOLDER, Config.REPORT_FOLDER):
+for folder in (Config.UPLOAD_FOLDER, Config.REPORT_FOLDER, Config.HEATMAP_FOLDER):
     os.makedirs(folder, exist_ok=True)

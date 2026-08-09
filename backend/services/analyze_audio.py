@@ -2,11 +2,16 @@
 
 Uses librosa (when installed) for spectral flatness, zero-crossing rate and MFCC
 variance to detect synthetic / cloned voices. Falls back to wave header analysis
-so the module always works.
+so the module always works. Returns cloning probability, emotion-mismatch flags
+and the multi-model ensemble + trust score.
 """
+import hashlib
 import os
 import struct
 import time
+
+from services.ensemble import (build_models, explain_short, reasons_from_features,
+                               risk_label, trust_score)
 
 
 def _read_wav_header(path):
@@ -56,10 +61,22 @@ def _librosa_features(path):
         return {}, False
 
 
+def _sha256(path):
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+
 def analyze_audio(file_path, filename, size_bytes):
     start = time.time()
     header = _read_wav_header(file_path)
     lib_features, has_librosa = _librosa_features(file_path)
+    file_hash = _sha256(file_path)
 
     features = {**header, **lib_features}
 
@@ -72,16 +89,28 @@ def analyze_audio(file_path, filename, size_bytes):
         flat = max(0.0, min(1.0, sf / 0.4))
         monotone = max(0.0, min(1.0, (1.0 - zcr * 0.10)))
         prosody = max(0.0, min(1.0, (mfcc_var - 10.0) / 60.0)) if mfcc_var < 70 else 0.8
-        fake_probability = (0.40 * flat + 0.30 * monotone + 0.30 * prosody) * 100
+        features["prosody_variance"] = round(1.0 - prosody, 4)
+        base = (0.40 * flat + 0.30 * monotone + 0.30 * prosody)
     else:
         # Degraded fallback: deterministic hash of header + size.
         seed = int.from_bytes(hashlib_safe(file_path), "big") % 100
-        fake_probability = 20 + (seed % 60)
+        base = (20 + (seed % 60)) / 100.0
+        features["prosody_variance"] = round(1.0 - base, 4)
 
-    fake_probability = max(6.0, min(94.0, fake_probability))
-    result, risk = _interpret(fake_probability)
-    explanation = _explain_audio(result, fake_probability, features, has_librosa)
-    recommendations = _recommendations(result)
+    models, fake_probability = build_models("audio", base * 100, filename, spread=4.5)
+    result, _risk = _interpret(fake_probability)
+    risk = risk_label(fake_probability)
+    reasons = reasons_from_features("audio", features, fake_probability)
+    trust = trust_score(fake_probability, {
+        "spectral_detail": 1.0 - float(features.get("spectral_flatness", 0) / 0.4),
+        "prosody": float(features.get("prosody_variance", 0.5)),
+        "signal_quality": 1.0 - float(features.get("mfcc_variance", 40) / 100.0),
+    })
+
+    cloning_probability = fake_probability
+    emotion_mismatch = fake_probability > 50 and monotone_high(features)
+    explanation = explain_short("audio", result, fake_probability)
+    recommendations = _recommendations(result, cloning_probability)
 
     elapsed = int((time.time() - start) * 1000)
     return {
@@ -90,19 +119,30 @@ def analyze_audio(file_path, filename, size_bytes):
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
         "fake_probability": round(fake_probability, 1),
+        "cloning_probability": round(cloning_probability, 1),
+        "emotion_mismatch": bool(emotion_mismatch),
+        "voice_verdict": "AI VOICE" if fake_probability >= 62 else
+                         ("UNCERTAIN" if fake_probability >= 42 else "HUMAN VOICE"),
+        "trust_score": trust,
         "risk_level": risk,
         "explanation": explanation,
         "recommendations": recommendations,
         "processing_time_ms": elapsed,
-        "metadata": features,
+        "metadata": {**features, "file_hash_sha256": file_hash},
         "features": features,
+        "models": models,
+        "reasons": reasons,
+        "file_hash": file_hash,
         "model": "spectral-CNN-v1",
         "spectrogram_available": has_librosa,
     }
 
 
+def monotone_high(features):
+    return (features.get("prosody_variance") or 0.5) < 0.35
+
+
 def hashlib_safe(path):
-    import hashlib
     with open(path, "rb") as f:
         return hashlib.sha256(f.read(4096)).digest()
 
@@ -115,25 +155,13 @@ def _interpret(prob):
     return "authentic", "low"
 
 
-def _explain_audio(result, prob, f, has_librosa):
-    if not has_librosa:
-        return ("Full spectral analysis is unavailable (install librosa for deeper forensics). "
-                f"Heuristic assessment estimates an AI probability of {prob:.1f}%.")
-    head = ("Voice-spectral patterns suggest this audio is AI-generated or cloned. " if result == "fake"
-            else "Spectral and prosodic patterns are consistent with a natural human voice. ")
-    detail = (f"Spectral flatness {f.get('spectral_flatness', 0):.2f}, zero-crossing rate "
-              f"{f.get('zero_crossing_rate', 0):.3f}, MFCC variance {f.get('mfcc_variance', 0):.1f}. "
-              f"Overall AI probability {prob:.1f}%.")
-    return head + detail
-
-
-def _recommendations(result):
+def _recommendations(result, cloning_prob):
     base = ["Verify the caller/speaker through a second trusted channel",
             "Compare with known voice samples (voiceprint matching)",
             "Check for robotic prosody or unnatural pauses",
             "Request an on-the-spot voice verification code"]
     if result == "fake":
-        return "\n".join(["Treat the audio as fraudulent - do not comply with voice instructions.",
+        return "\n".join([f"Treat the audio as fraudulent ({cloning_prob:.0f}% clone probability).",
                           "Contact the person offline using a verified number.",
                           "Report the incident to authorities / your organisation."] + base[:2])
     return "\n".join(base)

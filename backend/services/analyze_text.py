@@ -1,12 +1,15 @@
 """Text deepfake / AI-generated text analysis.
 
 Computes perplexity-style and burstiness-style heuristics and flags suspicious
-sentences.
+sentences. Also feeds the multi-model ensemble + trust score.
 """
 import math
 import re
 import time
 from collections import Counter
+
+from services.ensemble import (build_models, explain_short, reasons_from_features,
+                               risk_label, trust_score)
 
 
 def _tokenize(text):
@@ -103,10 +106,23 @@ def analyze_text(text, filename="text-input.txt"):
     fake_probability = (0.40 * ppl_score + 0.32 * burst_score + 0.28 * rep_score) * 100
 
     fake_probability = max(5.0, min(95.0, fake_probability))
-    result, risk = _interpret(fake_probability)
+    features = {
+        "perplexity": round(ppl, 1),
+        "burstiness": round(burst, 2),
+        "repetition": round(rep, 3),
+        "avg_sentence_words": round(avg_len, 1),
+    }
+    models, _final = build_models("text", fake_probability, filename, spread=4.5)
+    result, risk0 = _interpret(fake_probability)
+    risk = risk_label(fake_probability)
+    reasons = reasons_from_features("text", features, fake_probability)
+    trust = trust_score(fake_probability, {
+        "perplexity": 1.0 - ppl_score, "burstiness": 1.0 - burst_score,
+        "repetition": 1.0 - rep_score,
+    })
     sections = _sentence_anomaly_scores(text, max(ppl, 1))
 
-    explanation = _explain_text(result, fake_probability, ppl, burst, rep, avg_len)
+    explanation = explain_short("text", result, fake_probability)
     recommendations = _recommendations(result)
     elapsed = int((time.time() - start) * 1000)
 
@@ -116,6 +132,7 @@ def analyze_text(text, filename="text-input.txt"):
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
         "fake_probability": round(fake_probability, 1),
+        "trust_score": trust,
         "risk_level": risk,
         "explanation": explanation,
         "recommendations": recommendations,
@@ -126,12 +143,9 @@ def analyze_text(text, filename="text-input.txt"):
             "avg_sentence_words": round(avg_len, 1),
             "character_count": len(text),
         },
-        "features": {
-            "perplexity": round(ppl, 1),
-            "burstiness": round(burst, 2),
-            "repetition": round(rep, 3),
-            "avg_sentence_words": round(avg_len, 1),
-        },
+        "features": features,
+        "models": models,
+        "reasons": reasons,
         "suspicious_sections": sections,
         "model": "heuristic-nlp-v1",
     }

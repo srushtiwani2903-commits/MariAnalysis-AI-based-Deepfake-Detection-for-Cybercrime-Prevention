@@ -35,6 +35,8 @@ def _store_scan(user_id, scan_type, filename, original_filename, file_path, file
     metadata = dict(result.get("metadata", {}))
     metadata["reference_dataset"] = result.get("reference_dataset", "")
     metadata["reference_source"] = result.get("reference_source", "")
+    if result.get("heatmap_file"):
+        metadata["heatmap_file"] = result.get("heatmap_file")
     scan = ScanHistory(
         user_id=user_id,
         scan_type=scan_type,
@@ -49,6 +51,10 @@ def _store_scan(user_id, scan_type, filename, original_filename, file_path, file
         explanation=result.get("explanation", ""),
         recommendations=result.get("recommendations", ""),
         suspicious_sections=result.get("suspicious_sections", []),
+        trust_score=result.get("trust_score", 0),
+        file_hash=result.get("file_hash", ""),
+        models=result.get("models", []),
+        reasons=result.get("reasons", []),
         processing_time_ms=result.get("processing_time_ms", 0),
         scan_metadata=metadata,
     )
@@ -145,6 +151,75 @@ def detect_text():
     if result is None:
         return jsonify({"message": result["error"]}), 500
     return jsonify({"result": result}), 200
+
+
+@detect_bp.route("/email", methods=["POST"])
+@jwt_required()
+def detect_email():
+    """Detect phishing / scam emails from pasted content (no file needed)."""
+    if _rate_limit():
+        return jsonify({"message": "Too many requests. Try again later."}), 429
+    data = request.get_json(silent=True) or {}
+    text = sanitize_text(data.get("text", ""), 60_000)
+    if len(text.strip()) < 30:
+        return jsonify({"message": "Please provide the full email content (min 30 chars)."}), 400
+    subject = sanitize_text(data.get("subject", ""), 300)
+    body = f"Subject: {subject}\n\n{text}" if subject else text
+    filename = sanitize_text(data.get("filename", ""), 120) or "email-input.txt"
+    scan_id, result = _analyze_and_store("email", filename, filename, None,
+                                         len(body.encode("utf-8")), text=body)
+    if result is None:
+        return jsonify({"message": result["error"]}), 500
+    return jsonify({"result": result}), 200
+
+
+@detect_bp.route("/post", methods=["POST"])
+@jwt_required()
+def detect_post():
+    """Fake-news + deepfake combined: image + optional caption."""
+    if _rate_limit():
+        return jsonify({"message": "Too many requests. Try again later."}), 429
+    file = request.files.get("file")
+    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, Config.MAX_CONTENT_LENGTH)
+    if not ok:
+        return jsonify({"message": msg}), 400
+    caption = sanitize_text(request.form.get("caption", ""), 5_000)
+    path, stored_name, size = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
+    user_id = int(get_jwt_identity())
+    result = service.analyze("post", path, stored_name, size, caption=caption)
+    if "error" in result:
+        return jsonify({"message": result["error"]}), 500
+    scan_id = _store_scan(user_id, "post", stored_name, sanitize_filename(file.filename),
+                          path, size, result, caption)
+    result["scan_id"] = scan_id
+    result["can_download_pdf"] = True
+    return jsonify({"result": result}), 200
+
+
+@detect_bp.route("/realtime", methods=["POST"])
+@jwt_required()
+def detect_realtime():
+    """Analyse a single webcam frame for live deepfake detection. Never stored."""
+    if _rate_limit():
+        return jsonify({"message": "Too many requests. Try again later."}), 429
+    file = request.files.get("file")
+    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_CONTENT_LENGTH, 5 * 1024 * 1024))
+    if not ok:
+        return jsonify({"message": msg}), 400
+    path, stored_name, _ = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
+    try:
+        result = service.analyze("image", path, stored_name, size)
+        if "error" in result:
+            return jsonify({"message": result["error"]}), 500
+        result.pop("scan_id", None)
+        result["persisted"] = False
+        result["live"] = True
+        return jsonify({"result": result}), 200
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 @detect_bp.route("/health", methods=["GET"])

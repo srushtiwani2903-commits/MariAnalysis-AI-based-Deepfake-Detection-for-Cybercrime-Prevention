@@ -63,6 +63,26 @@ def _append_log(filename: str, line: str):
         f.write(f"[{datetime.now(timezone.utc).isoformat()}] {line}\n")
 
 
+def send_case_email(to_email: str, case_id: str, scan) -> bool:
+    """Send an evidence-case confirmation email (deepfake cybercrime report)."""
+    if not to_email or to_email.endswith(".local"):
+        _append_log("case_emails.log", f"{to_email} | {case_id} | {scan.id} | {scan.result}")
+        return False
+    result = scan.result.upper() if scan else ""
+    body = (
+        f"MariAnalysis - Deepfake Evidence Case {case_id}\n"
+        f"==========================================\n"
+        f"Scan: {scan.original_filename or scan.filename}\n"
+        f"Verdict: {result} (fake probability {scan.fake_probability:.1f}%)\n"
+        f"Trust score: {scan.trust_score:.1f}/100\n"
+        f"File SHA-256: {scan.file_hash}\n\n"
+        f"Keep this email and the attached forensic PDF as evidence.\n"
+        f"Report it to your local cybercrime helpline (India: 1930) for follow-up."
+    )
+    subject = f"MariAnalysis - Evidence Case {case_id} registered"
+    return send_raw(to_email, subject, body)
+
+
 def send_reset_email(to_email: str, reset_link: str) -> bool:
     """Send a password reset email. Returns True if delivered via SMTP,
     False if it was logged instead (SMTP not configured)."""

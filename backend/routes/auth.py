@@ -23,7 +23,8 @@ from utils.helpers import generate_reset_token
 from utils.idps import audit, ban_remaining_seconds, is_banned, record_failure, record_success
 from utils.mailer import send_reset_email
 from utils.otp import issue_otp, send_email_otp, send_phone_otp, verify_otp
-from utils.security import limiter, sanitize_string
+from utils.security import (encrypt_secret, is_encrypted, limiter, sanitize_string,
+                            decrypt_secret)
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -85,6 +86,7 @@ def _issue_session(user):
         user_id=user.id, jti=jti,
         expires_at=now + Config.JWT_ACCESS_TOKEN_EXPIRES,
         ip_address=request.remote_addr,
+        user_agent=(request.user_agent.string or "")[:255],
     ))
     db.session.commit()
     return create_access_token(identity=str(user.id), additional_claims={"jti": jti})
@@ -233,7 +235,8 @@ def login():
     # other active session is revoked on the spot and those devices are told
     # (via SSE) to log out immediately - no refresh or manual logout needed.
     if _active_sessions(user.id):
-        ActiveSession.query.filter_by(user_id=user.id, is_active=True).update({"is_active": False})
+        ActiveSession.query.filter_by(user_id=user.id, is_active=True).update(
+            {"is_active": False, "revoked_reason": "superseded"})
         db.session.commit()
         _publish(user.id, "session_revoked", str(user.id))
 
@@ -261,7 +264,8 @@ def forgot_password():
     user = User.query.filter_by(email=email).first()
     if user:
         token = generate_reset_token()
-        user.reset_token = token
+        # Stored encrypted at rest; the plaintext lives only in the emailed link.
+        user.reset_token = encrypt_secret(token)
         user.reset_token_expires = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
             hours=Config.RESET_TOKEN_TTL_HOURS)
         link = (f"{Config.FRONTEND_URL}/reset-password?"
@@ -300,7 +304,13 @@ def reset_password():
         return jsonify({"message": "Reset link is invalid or has expired."}), 400
     if not user.reset_token or not user.reset_token_expires:
         return jsonify({"message": "Reset link is invalid or has expired."}), 400
-    if not secrets.compare_digest(user.reset_token, token):
+    stored = user.reset_token
+    if is_encrypted(stored):
+        try:
+            stored = decrypt_secret(stored)
+        except Exception:  # noqa: BLE001 - bad/rotated ciphertext -> treat as invalid
+            return jsonify({"message": "Reset link is invalid or has expired."}), 400
+    if not secrets.compare_digest(stored, token):
         return jsonify({"message": "Reset link is invalid or has expired."}), 400
     if datetime.now(timezone.utc).replace(tzinfo=None) > user.reset_token_expires:
         return jsonify({"message": "Reset link has expired. Please request a new one."}), 400
@@ -329,7 +339,8 @@ def me():
 def logout():
     jti = get_jwt().get("jti")
     if jti:
-        ActiveSession.query.filter_by(jti=jti).update({"is_active": False})
+        ActiveSession.query.filter_by(jti=jti).update(
+            {"is_active": False, "revoked_reason": "logout"})
         db.session.commit()
     return jsonify({"message": "Logged out."})
 

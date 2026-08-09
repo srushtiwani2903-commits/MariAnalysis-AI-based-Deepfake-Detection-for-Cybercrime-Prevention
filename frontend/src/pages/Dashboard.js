@@ -12,6 +12,11 @@ import {
   DocumentTextIcon,
   ArrowRightIcon,
   ClockIcon,
+  VideoCameraIcon,
+  EnvelopeIcon,
+  ShareIcon,
+  FingerPrintIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
 import StatCard from "../components/StatCard";
@@ -25,6 +30,14 @@ const detectors = [
   { to: "/detect/video", icon: FilmIcon, title: "Video Detection", desc: "MP4, AVI, MOV, WebM", color: "from-neon-purple to-fuchsia-500" },
   { to: "/detect/audio", icon: MusicalNoteIcon, title: "Audio Detection", desc: "MP3, WAV, OGG, FLAC", color: "from-pink-500 to-rose-400" },
   { to: "/detect/text", icon: DocumentTextIcon, title: "Text Detection", desc: "AI-written content, phishing", color: "from-amber-400 to-orange-500" },
+];
+
+const tools = [
+  { to: "/detect/realtime", icon: VideoCameraIcon, title: "Live Webcam Check", desc: "Real-time frame analysis", color: "from-cyan-400 to-neon-blue" },
+  { to: "/detect/email", icon: EnvelopeIcon, title: "Email Scanner", desc: "Phishing & AI-written mail", color: "from-pink-500 to-rose-400" },
+  { to: "/detect/social", icon: ShareIcon, title: "Social Post", desc: "Image + caption verification", color: "from-violet-500 to-neon-purple" },
+  { to: "/evidence", icon: FingerPrintIcon, title: "Report Fraud", desc: "Evidence + case ID", color: "from-amber-400 to-orange-500" },
+  { to: "/org-dashboard", icon: BuildingOffice2Icon, title: "Org Dashboard", desc: "Team threat overview", color: "from-emerald-400 to-teal-500" },
 ];
 
 export default function Dashboard() {
@@ -95,6 +108,28 @@ export default function Dashboard() {
                 <span className="inline-flex items-center gap-1 text-xs text-neon-blue mt-3 font-medium">
                   Start scan <ArrowRightIcon className="w-3.5 h-3.5" />
                 </span>
+              </GlassCard>
+            </Link>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Advanced tools */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {tools.map((d, i) => (
+          <motion.div
+            key={d.to}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 + i * 0.06 }}
+          >
+            <Link to={d.to}>
+              <GlassCard hover className="h-full !p-4">
+                <span className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${d.color} text-white mb-3`}>
+                  <d.icon className="w-5 h-5" />
+                </span>
+                <h3 className="font-bold text-sm">{d.title}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{d.desc}</p>
               </GlassCard>
             </Link>
           </motion.div>

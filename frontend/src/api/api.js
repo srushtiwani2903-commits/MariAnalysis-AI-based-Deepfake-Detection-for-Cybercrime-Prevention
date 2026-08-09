@@ -24,7 +24,9 @@ api.interceptors.response.use(
     error.message = message;
     if (error.response?.status === 401) {
       localStorage.removeItem("deepguard-token");
-      window.dispatchEvent(new CustomEvent("deepguard:unauthorized"));
+      window.dispatchEvent(
+        new CustomEvent("deepguard:unauthorized", { detail: { message, status: 401 } })
+      );
     }
     return Promise.reject(error);
   }

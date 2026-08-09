@@ -6,6 +6,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import ScrollToTop from "./components/ScrollToTop";
 import VoiceAssistant from "./components/VoiceAssistant";
+import Chatbot from "./components/Chatbot";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -17,6 +18,11 @@ import ImageDetection from "./pages/ImageDetection";
 import VideoDetection from "./pages/VideoDetection";
 import AudioDetection from "./pages/AudioDetection";
 import TextDetection from "./pages/TextDetection";
+import RealtimeCam from "./pages/RealtimeCam";
+import EmailDetection from "./pages/EmailDetection";
+import SocialPostDetection from "./pages/SocialPostDetection";
+import Evidence from "./pages/Evidence";
+import OrgDashboard from "./pages/OrgDashboard";
 import Results from "./pages/Results";
 import History from "./pages/History";
 import Analytics from "./pages/Analytics";
@@ -61,6 +67,11 @@ function AnimatedRoutes() {
             <Route path="/detect/video" element={<VideoDetection />} />
             <Route path="/detect/audio" element={<AudioDetection />} />
             <Route path="/detect/text" element={<TextDetection />} />
+            <Route path="/detect/realtime" element={<RealtimeCam />} />
+            <Route path="/detect/email" element={<EmailDetection />} />
+            <Route path="/detect/social" element={<SocialPostDetection />} />
+            <Route path="/evidence" element={<Evidence />} />
+            <Route path="/org-dashboard" element={<OrgDashboard />} />
             <Route path="/results/:scanId" element={<Results />} />
             <Route path="/history" element={<History />} />
             <Route path="/analytics" element={<Analytics />} />
@@ -92,6 +103,7 @@ export default function App() {
       </div>
       <Footer />
       <VoiceAssistant />
+      <Chatbot />
     </div>
   );
 }

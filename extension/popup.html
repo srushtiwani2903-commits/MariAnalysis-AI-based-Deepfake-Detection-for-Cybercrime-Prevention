@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepGuard</title>
+  <style>
+    :root { --blue: #22d3ee; --purple: #7c3aed; --bg: #0b1020; --panel: #141a33; }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      width: 320px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: #e2e8f0;
+    }
+    .header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px;
+      background: linear-gradient(90deg, var(--blue), var(--purple));
+      color: #fff;
+    }
+    .header h1 { font-size: 15px; font-weight: 700; }
+    .body { padding: 14px 16px 18px; }
+    label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; display: block; margin-bottom: 6px; }
+    input, select {
+      width: 100%; padding: 8px 10px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.12); background: var(--panel); color: #e2e8f0;
+      font-size: 13px; margin-bottom: 12px;
+    }
+    .row { display: flex; gap: 8px; }
+    .row select { margin-bottom: 0; }
+    .hint { font-size: 11px; color: #64748b; margin: 2px 0 12px; line-height: 1.4; }
+    button {
+      width: 100%; padding: 10px; border: 0; border-radius: 10px; cursor: pointer;
+      background: linear-gradient(90deg, var(--blue), var(--purple)); color: #fff;
+      font-weight: 600; font-size: 13px;
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    #status {
+      margin-top: 12px; padding: 10px; border-radius: 10px; font-size: 12px;
+      background: var(--panel); border: 1px solid rgba(255,255,255,.08); line-height: 1.5;
+      max-height: 170px; overflow-y: auto;
+    }
+    #status.fake { border-color: #fb7185; color: #fda4af; }
+    #status.ok { border-color: #34d399; color: #6ee7b7; }
+    #status.warn { border-color: #fbbf24; color: #fcd34d; }
+    .bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); margin-top: 6px; overflow: hidden; }
+    .bar > div { height: 100%; border-radius: 999px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span>🛡</span>
+    <h1>DeepGuard</h1>
+  </div>
+  <div class="body">
+    <label for="apiKey">API Key (from your MariAnalysis profile)</label>
+    <input type="password" id="apiKey" placeholder="ma_..." />
+    <button id="saveBtn">Save Key</button>
+    <p class="hint">Saved locally in your browser. Never shared.</p>
+
+    <label>Or paste an image URL to analyze now</label>
+    <div class="row">
+      <input type="url" id="imgUrl" placeholder="https://example.com/image.jpg" />
+      <select id="mediaType">
+        <option value="image">Image</option>
+      </select>
+    </div>
+    <button id="analyzeBtn" style="margin-top:10px">Analyze Image</button>
+
+    <div id="status">Ready.</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
