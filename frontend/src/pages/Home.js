@@ -14,7 +14,6 @@ import {
   BeakerIcon,
   CloudArrowUpIcon,
   Cog6ToothIcon,
-  AcademicCapIcon,
 } from "@heroicons/react/24/outline";
 import ParticleBackground from "../components/ParticleBackground";
 import { useAuth } from "../context/AuthContext";
@@ -190,21 +189,6 @@ export default function Home() {
               </div>
             </div>
 
-            <motion.div
-              animate={{ y: [0, -14, 0] }}
-              transition={{ duration: 5, repeat: Infinity }}
-              className="absolute -top-6 -right-4 glass-strong rounded-2xl p-4 shadow-glow"
-            >
-              <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center text-white">
-                  <AcademicCapIcon className="w-5 h-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-bold">Model Accuracy</p>
-                  <p className="text-neon-blue font-mono font-bold">98.7%</p>
-                </div>
-              </div>
-            </motion.div>
           </motion.div>
         </div>
       </section>
