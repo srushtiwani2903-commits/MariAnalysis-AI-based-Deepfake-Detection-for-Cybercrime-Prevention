@@ -176,6 +176,20 @@ npm start                                # starts on http://localhost:3000
 > The frontend proxies `/api` to `http://localhost:5000` during development.
 > For production set `REACT_APP_API_URL` (see `.env.example`).
 
+### 3) Auto-start on every login (one-time, per machine)
+
+After cloning, run this **once** on your PC — it sets up the venv, installs all
+backend + frontend dependencies, creates `backend/.env`, and registers the
+startup shortcut so that at every Windows login the backend + frontend start
+automatically and the website opens in your browser by itself:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
+```
+
+> This registers a shortcut in *your* Windows Startup folder, so it only affects
+> your own machine — each collaborator runs the same one-liner on their PC.
+
 ---
 
 ## 🔌 API Endpoints (summary)
