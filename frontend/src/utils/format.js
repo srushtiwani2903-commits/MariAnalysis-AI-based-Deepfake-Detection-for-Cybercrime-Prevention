@@ -1,4 +1,26 @@
 // Shared display formatters
+// All timestamps are stored in UTC by the backend; we render them in
+// Indian Standard Time (Asia/Kolkata) so every screen shows IST.
+const IST_TIMEZONE = "Asia/Kolkata";
+
+const IST_FORMATTER = new Intl.DateTimeFormat("en-IN", {
+  timeZone: IST_TIMEZONE,
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+  timeZoneName: "short",
+});
+
+const IST_DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
+  timeZone: IST_TIMEZONE,
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
 
 export function humanSize(bytes) {
   if (bytes == null) return "—";
@@ -25,12 +47,12 @@ export function timeAgo(iso) {
   if (hr < 24) return `${hr}h ago`;
   const day = Math.floor(hr / 24);
   if (day < 30) return `${day}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return IST_DATE_FORMATTER.format(new Date(iso));
 }
 
 export function formatDate(iso) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString();
+  return IST_FORMATTER.format(new Date(iso));
 }
 
 export function riskColor(risk) {

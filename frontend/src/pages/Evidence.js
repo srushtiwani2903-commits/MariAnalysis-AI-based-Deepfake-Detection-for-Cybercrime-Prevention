@@ -6,6 +6,7 @@ import {
   CubeIcon, PlusIcon,
 } from "@heroicons/react/24/outline";
 import api from "../api/api";
+import { formatDate } from "../utils/format";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
@@ -204,7 +205,7 @@ export default function Evidence() {
               <div className="space-y-2 text-sm">
                 {[["Status", detail.status],
                   ["Platform", detail.platform || "—"],
-                  ["Registered", detail.created_at],
+                  ["Registered", formatDate(detail.created_at)],
                   ["Scan", detail.scan ? `#${detail.scan_id} · ${detail.scan.filename} (${Math.round(detail.scan?.fake_probability || 0)}% fake)` : `#${detail.scan_id}`],
                   ["Report hash", detail.report_hash ? `${detail.report_hash.slice(0, 24)}…` : "—"],
                 ].map(([k, v]) => (
@@ -226,7 +227,7 @@ export default function Evidence() {
                       <p>block #{detail.block.index}</p>
                       <p>hash: {detail.block.hash.slice(0, 32)}…</p>
                       <p>prev: {detail.block.prev_hash.slice(0, 20)}…</p>
-                      <p>timestamp: {detail.block.timestamp}</p>
+                      <p>timestamp: {formatDate(detail.block.timestamp)}</p>
                     </div>
                   </div>
                 )}

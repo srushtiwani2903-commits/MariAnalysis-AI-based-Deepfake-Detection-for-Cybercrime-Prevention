@@ -2,6 +2,7 @@
 import csv
 import io
 import os
+from datetime import timedelta
 import uuid
 
 from reportlab.lib import colors
@@ -15,6 +16,16 @@ from utils.helpers import human_size
 
 APP_NAME = "MariAnalysis"
 APP_TAGLINE = "AI-Based Deepfake Detection for Cybercrime Prevention"
+
+# Scans are stored in UTC; reports are rendered in Indian Standard Time.
+IST_OFFSET = timedelta(hours=5, minutes=30)
+
+
+def _ist_str(dt):
+    """Format a stored UTC datetime in IST (Asia/Kolkata, UTC+05:30)."""
+    if not dt:
+        return "N/A"
+    return (dt + IST_OFFSET).strftime("%Y-%m-%d %H:%M:%S IST")
 
 
 def _style_sheet():
@@ -93,7 +104,7 @@ def generate_pdf_report(scan, out_dir: str, case=None, chain=None) -> str:
         ["Scan Type", scan.scan_type.title()],
         ["File", scan.filename],
         ["File Size", human_size(scan.file_size)],
-        ["Timestamp", scan.created_at.strftime("%Y-%m-%d %H:%M UTC") if scan.created_at else "N/A"],
+        ["Timestamp", _ist_str(scan.created_at)],
         ["Confidence", f"{scan.confidence:.1f}%"],
         ["Fake Probability", f"{scan.fake_probability:.1f}%"],
         ["Trust Score", f"{scan.trust_score:.1f} / 100"],
@@ -233,7 +244,7 @@ def generate_csv_report(scan, case=None) -> str:
     writer.writerow(["scan_type", scan.scan_type])
     writer.writerow(["filename", scan.filename])
     writer.writerow(["file_size", scan.file_size])
-    writer.writerow(["timestamp", scan.created_at.strftime("%Y-%m-%d %H:%M UTC") if scan.created_at else ""])
+    writer.writerow(["timestamp", _ist_str(scan.created_at)])
     writer.writerow(["result", scan.result])
     writer.writerow(["confidence", f"{scan.confidence:.2f}"])
     writer.writerow(["fake_probability", f"{scan.fake_probability:.2f}"])
