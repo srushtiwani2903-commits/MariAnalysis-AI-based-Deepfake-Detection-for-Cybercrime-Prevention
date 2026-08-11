@@ -24,6 +24,7 @@ from routes.detection import detect_bp
 from routes.evidence import evidence_bp
 from routes.history import history_bp
 from routes.keys import keys_bp
+from routes.model import model_bp
 from routes.reports import reports_bp
 
 
@@ -134,6 +135,7 @@ def create_app(config_class=Config):
     app.register_blueprint(chat_bp, url_prefix="/api/chat")
     app.register_blueprint(evidence_bp, url_prefix="/api/evidence")
     app.register_blueprint(keys_bp, url_prefix="/api")
+    app.register_blueprint(model_bp, url_prefix="/api/model")
 
     @app.get("/")
     def root():
@@ -188,6 +190,11 @@ def create_app(config_class=Config):
                          "GET /api/chat/suggestions"],
                 "keys": ["GET /api/keys", "POST /api/keys (browser-extension API key)",
                          "DELETE /api/keys/<id>", "POST /api/extend/analyze"],
+                "model": ["POST /api/model/train (admin - start Kaggle GPU cloud training {media: image|video|audio|text})",
+                          "GET /api/model/train/<media> (admin - job status)",
+                          "POST /api/model/train/<media>/download (admin - pull trained weights)",
+                          "GET /api/model/weights (admin - local trained models)",
+                          "GET /api/model/health (admin - kaggle client + credentials)"],
                 "admin": ["GET /api/admin/stats", "GET /api/admin/users",
                           "DELETE /api/admin/users/<id>", "POST /api/admin/users/<id>/toggle-admin",
                           "GET /api/admin/logs", "GET /api/admin/health",

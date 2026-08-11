@@ -78,6 +78,33 @@ def build_models(media_type, fake_probability, filename, spread=4.0):
     return models, round(final_prob, 1)
 
 
+def append_real_models(models, provider_results):
+    """Append genuine AI-provider verdicts to the per-model table.
+
+    ``provider_results`` is a list of ``(provider_dict, display_name)`` where
+    provider_dict is the dict returned by services.model_providers. Entries
+    whose provider was unavailable are skipped. The weighted vote is NOT
+    recomputed here - the base probability was already blended before
+    ``build_models`` ran, so these rows are purely transparent/display.
+    """
+    added = []
+    for provider, name in provider_results:
+        if not provider or not provider.get("available"):
+            continue
+        prob = max(0.0, min(100.0, float(provider.get("fake_probability", 50))))
+        prediction = _interpret(prob)[0]
+        models.append({
+            "name": name,
+            "weight": None,
+            "prediction": prediction,
+            "fake_probability": round(prob, 1),
+            "provider": provider.get("provider", ""),
+            "real_model": True,
+        })
+        added.append(name)
+    return models
+
+
 def trust_score(fake_probability, factors=None):
     """0-100 evidence trust score. `factors` is a dict of 0..1 sub-scores."""
     factors = factors or {}

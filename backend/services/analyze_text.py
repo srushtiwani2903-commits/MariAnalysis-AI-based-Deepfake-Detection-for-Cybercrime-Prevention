@@ -8,8 +8,10 @@ import re
 import time
 from collections import Counter
 
-from services.ensemble import (build_models, explain_short, reasons_from_features,
-                               risk_label, trust_score)
+from config import Config
+from services.ensemble import (append_real_models, build_models, explain_short,
+                               reasons_from_features, risk_label, trust_score)
+from services.model_providers import blend_scores, gemini_score, local_score, score_reason
 
 
 def _tokenize(text):
@@ -106,6 +108,14 @@ def analyze_text(text, filename="text-input.txt"):
     fake_probability = (0.40 * ppl_score + 0.32 * burst_score + 0.28 * rep_score) * 100
 
     fake_probability = max(5.0, min(95.0, fake_probability))
+
+    # Real AI providers blend (Gemini + local RoBERTa).
+    gemini = gemini_score("text", text=text)
+    local = local_score("text", text=text)
+    blended = blend_scores(fake_probability, gemini, local)
+    fake_probability = max(0.0, min(100.0, blended))
+    provider_note = score_reason(gemini, "text") + score_reason(local, "text")
+
     features = {
         "perplexity": round(ppl, 1),
         "burstiness": round(burst, 2),
@@ -113,6 +123,10 @@ def analyze_text(text, filename="text-input.txt"):
         "avg_sentence_words": round(avg_len, 1),
     }
     models, _final = build_models("text", fake_probability, filename, spread=4.5)
+    models = append_real_models(models, [
+        (gemini, f"Gemini ({Config.GEMINI_MODEL})"),
+        (local, "Local RoBERTa (openai-detector)"),
+    ])
     result, risk0 = _interpret(fake_probability)
     risk = risk_label(fake_probability)
     reasons = reasons_from_features("text", features, fake_probability)
@@ -122,7 +136,7 @@ def analyze_text(text, filename="text-input.txt"):
     })
     sections = _sentence_anomaly_scores(text, max(ppl, 1))
 
-    explanation = explain_short("text", result, fake_probability)
+    explanation = explain_short("text", result, fake_probability) + provider_note
     recommendations = _recommendations(result)
     elapsed = int((time.time() - start) * 1000)
 
@@ -147,6 +161,7 @@ def analyze_text(text, filename="text-input.txt"):
         "models": models,
         "reasons": reasons,
         "suspicious_sections": sections,
+        "ai_providers": {"gemini": gemini, "local": local},
         "model": "heuristic-nlp-v1",
     }
 
@@ -178,3 +193,4 @@ def _recommendations(result):
                           "Verify claims with primary sources.",
                           "Flag the account/content for review."] + base[:2])
     return "\n".join(base)
+

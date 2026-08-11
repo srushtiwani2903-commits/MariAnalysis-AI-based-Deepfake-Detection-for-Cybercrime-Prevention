@@ -7,8 +7,10 @@ import re
 import time
 
 from services.analyze_text import analyze_text
-from services.ensemble import (build_models, explain_short, reasons_from_features,
-                               risk_label, trust_score)
+from config import Config
+from services.ensemble import (append_real_models, build_models, explain_short,
+                               reasons_from_features, risk_label, trust_score)
+from services.model_providers import blend_scores, gemini_score, local_score, score_reason
 
 URGENCY = re.compile(r"\b(urgent|immediately|act now|asap|limited time|last chance|"
                      r"expires? (today|soon)|final notice|account suspended)\b", re.I)
@@ -49,7 +51,19 @@ def analyze_email(text, filename="email-input.txt"):
         base = base * 0.7 + (nlp["fake_probability"] / 100.0) * 0.3
 
     base = max(0.0, min(1.0, base))
+
+    # Real AI providers blend (Gemini + local RoBERTa on the email body).
+    gemini = gemini_score("email", text=text)
+    local = local_score("email", text=text)
+    blended = blend_scores(base * 100, gemini, local)
+    base = max(0.0, min(1.0, blended / 100.0))
+    provider_note = score_reason(gemini, "email") + score_reason(local, "email")
+
     models, fake_probability = build_models("email", base * 100, filename, spread=5.0)
+    models = append_real_models(models, [
+        (gemini, f"Gemini ({Config.GEMINI_MODEL})"),
+        (local, "Local RoBERTa (openai-detector)"),
+    ])
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
     reasons = reasons_from_features("email", features, fake_probability)
@@ -59,7 +73,7 @@ def analyze_email(text, filename="email-input.txt"):
         "links": 1.0 - features["link_risk"],
         "sender": 1.0 - features["sender_authenticity"],
     })
-    explanation = explain_short("email", result, fake_probability)
+    explanation = explain_short("email", result, fake_probability) + provider_note
     if fake_probability >= 62:
         explanation += (" Typical scam triggers found: urgency cues, financial pressure "
                         "and/or suspicious links/sender. Do not click links or reply.")
@@ -88,6 +102,7 @@ def analyze_email(text, filename="email-input.txt"):
         "models": models,
         "reasons": reasons,
         "suspicious_sections": sections,
+        "ai_providers": {"gemini": gemini, "local": local},
         "model": "phish-heuristic-v1",
     }
 
@@ -112,3 +127,4 @@ def _recommendations(result):
                           "Forward it to your security team or the platform's abuse address.",
                           "Report to cybercrime authorities with a screenshot."] + base[:2])
     return "\n".join(base)
+

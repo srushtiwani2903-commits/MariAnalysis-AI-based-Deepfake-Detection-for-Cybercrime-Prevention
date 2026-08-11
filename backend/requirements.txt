@@ -9,3 +9,6 @@ Pillow==10.4.0
 qrcode==7.4.2
 gunicorn==22.0.0
 python-dotenv==1.0.1
+kaggle==2.2.4
+# Google Gemini API (free tier) - real AI scanning for image/video/audio/text
+google-genai>=1.0.0

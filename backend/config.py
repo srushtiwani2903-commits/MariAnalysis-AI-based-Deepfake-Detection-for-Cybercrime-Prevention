@@ -60,6 +60,30 @@ class Config:
     KAGGLE_REFERENCE_ENABLED = os.environ.get("KAGGLE_REFERENCE_ENABLED", "true").lower() == "true"
     KAGGLE_REFERENCE_SAMPLE_SIZE = int(os.environ.get("KAGGLE_REFERENCE_SAMPLE_SIZE", 10))
 
+    # --- Real AI model providers (Hybrid engine) ---
+    # Gemini (Google AI Studio free key, https://aistudio.google.com/app/apikey):
+    # one multimodal API that scans images, sampled video frames, audio and text.
+    # Free tier: gemini-2.5-flash ~250 req/day, gemini-2.5-flash-lite ~1000 req/day.
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", 20))
+    # Local Hugging Face transformers (offline image + text) - free & unlimited.
+    LOCAL_MODELS_ENABLED = os.environ.get("LOCAL_MODELS_ENABLED", "true").lower() == "true"
+    # Blend weights for the final verdict. Unavailable providers are dropped and
+    # the remaining weights re-normalised, so heuristics stay as the fallback.
+    AI_BLEND_HEURISTIC = float(os.environ.get("AI_BLEND_HEURISTIC", 0.35))
+    AI_BLEND_GEMINI = float(os.environ.get("AI_BLEND_GEMINI", 0.40))
+    AI_BLEND_LOCAL = float(os.environ.get("AI_BLEND_LOCAL", 0.25))
+
+    # --- Cloud model training (Kaggle GPU notebooks) ---
+    # Training runs entirely on Kaggle's cloud: the app pushes a notebook,
+    # Kaggle mounts the dataset on its own machine, and only the trained
+    # weights are pulled back into models/<media>/. The datasets themselves
+    # are never downloaded into the project.
+    MODEL_WEIGHTS_FOLDER = os.path.join(BASE_DIR, "models")
+    KAGGLE_TRAIN_POLL_SECONDS = int(os.environ.get("KAGGLE_TRAIN_POLL_SECONDS", 45))
+    KAGGLE_TRAIN_MAX_HOURS = int(os.environ.get("KAGGLE_TRAIN_MAX_HOURS", 6))
+
     # --- CORS ---
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
 

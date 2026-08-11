@@ -7,7 +7,10 @@ import time
 
 from services.analyze_image import analyze_image
 from services.analyze_text import analyze_text
-from services.ensemble import (build_models, explain_short, risk_label, trust_score)
+from config import Config
+from services.ensemble import (append_real_models, build_models, explain_short,
+                               risk_label, trust_score)
+from services.model_providers import blend_scores, gemini_score, score_reason
 
 
 def analyze_post(image_path, image_filename, image_size, caption):
@@ -31,7 +34,15 @@ def analyze_post(image_path, image_filename, image_size, caption):
         base = img_prob
 
     base = max(0.0, min(100.0, base))
+
+    # Cross-modal Gemini verdict on image + caption together.
+    gemini = gemini_score("post", file_path=image_path, text=caption or "")
+    blended = blend_scores(base, gemini, None)
+    base = max(0.0, min(100.0, blended))
+    provider_note = score_reason(gemini, "post")
+
     models, _final = build_models("post", base, f"{image_filename}|{caption[:40]}", spread=4.5)
+    models = append_real_models(models, [(gemini, f"Gemini ({Config.GEMINI_MODEL})")])
     result, _risk = _interpret(base)
     risk = risk_label(base)
     trust = trust_score(base, {
@@ -39,7 +50,7 @@ def analyze_post(image_path, image_filename, image_size, caption):
         "textual": max(0.0, (100.0 - text_prob) / 100.0),
     })
 
-    explanation = explain_short("post", result, base)
+    explanation = explain_short("post", result, base) + provider_note
     recommendations = _recommendations(result)
     elapsed = int((time.time() - start) * 1000)
 
@@ -71,6 +82,7 @@ def analyze_post(image_path, image_filename, image_size, caption):
         "file_hash": image_result.get("file_hash", ""),
         "suspicious_sections": (caption_result.get("suspicious_sections") or [])[:10],
         "heatmap_file": image_result.get("heatmap_file", ""),
+        "ai_providers": {"gemini": gemini, "local": None},
         "model": "cross-modal-fusion-v1",
     }
 
@@ -93,3 +105,4 @@ def _recommendations(result):
                           "Report it as misinformation on the platform.",
                           "Share the verified fact-check instead."] + base[:2])
     return "\n".join(base)
+

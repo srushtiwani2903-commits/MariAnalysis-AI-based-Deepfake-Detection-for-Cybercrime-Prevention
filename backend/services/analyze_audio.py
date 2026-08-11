@@ -10,8 +10,10 @@ import os
 import struct
 import time
 
-from services.ensemble import (build_models, explain_short, reasons_from_features,
-                               risk_label, trust_score)
+from config import Config
+from services.ensemble import (append_real_models, build_models, explain_short,
+                               reasons_from_features, risk_label, trust_score)
+from services.model_providers import blend_scores, gemini_score, score_reason
 
 
 def _read_wav_header(path):
@@ -97,7 +99,14 @@ def analyze_audio(file_path, filename, size_bytes):
         base = (20 + (seed % 60)) / 100.0
         features["prosody_variance"] = round(1.0 - base, 4)
 
+    # Gemini analyses the audio directly (spectral / voice-clone assessment).
+    gemini = gemini_score("audio", file_path=file_path)
+    blended = blend_scores(base * 100, gemini, None)
+    base = max(0.0, min(1.0, blended / 100.0))
+    provider_note = score_reason(gemini, "audio")
+
     models, fake_probability = build_models("audio", base * 100, filename, spread=4.5)
+    models = append_real_models(models, [(gemini, f"Gemini ({Config.GEMINI_MODEL})")])
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
     reasons = reasons_from_features("audio", features, fake_probability)
@@ -109,7 +118,7 @@ def analyze_audio(file_path, filename, size_bytes):
 
     cloning_probability = fake_probability
     emotion_mismatch = fake_probability > 50 and monotone_high(features)
-    explanation = explain_short("audio", result, fake_probability)
+    explanation = explain_short("audio", result, fake_probability) + provider_note
     recommendations = _recommendations(result, cloning_probability)
 
     elapsed = int((time.time() - start) * 1000)
@@ -135,6 +144,7 @@ def analyze_audio(file_path, filename, size_bytes):
         "file_hash": file_hash,
         "model": "spectral-CNN-v1",
         "spectrogram_available": has_librosa,
+        "ai_providers": {"gemini": gemini, "local": None},
     }
 
 
@@ -165,3 +175,4 @@ def _recommendations(result, cloning_prob):
                           "Contact the person offline using a verified number.",
                           "Report the incident to authorities / your organisation."] + base[:2])
     return "\n".join(base)
+

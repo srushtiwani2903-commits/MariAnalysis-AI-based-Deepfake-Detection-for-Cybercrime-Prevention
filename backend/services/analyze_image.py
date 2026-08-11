@@ -13,8 +13,10 @@ from PIL import Image, ImageChops, ImageStat
 from PIL.ExifTags import TAGS
 
 from config import Config
-from services.ensemble import (build_models, explain_short, reasons_from_features,
-                               risk_label, trust_score)
+from services.ensemble import (append_real_models, build_models, explain_short,
+                               reasons_from_features, risk_label, trust_score)
+from services.model_providers import (blend_scores, gemini_score, local_score,
+                                      score_reason)
 
 
 def _average_hash(image, hash_size=16):
@@ -249,7 +251,21 @@ def analyze_image(file_path, filename, size_bytes):
     except Exception:  # noqa: BLE001
         kaggle_info = None
 
+    # ----------------------- Real AI providers blend ---------------------- #
+    # Gemini + local ViT add genuine signals on top of the heuristics. Any
+    # provider that is unavailable is skipped and the remaining weights are
+    # re-normalised inside blend_scores(), so heuristics stay as the fallback.
+    gemini = gemini_score("image", file_path=file_path)
+    local = local_score("image", file_path=file_path)
+    blended = blend_scores(base * 100, gemini, local)
+    base = max(0.0, min(1.0, blended / 100.0))
+    provider_note = score_reason(gemini, "image") + score_reason(local, "image")
+
     models, fake_probability = build_models("image", base * 100, filename, spread=4.0)
+    models = append_real_models(models, [
+        (gemini, f"Gemini ({Config.GEMINI_MODEL})"),
+        (local, "Local ViT (deepfake-vs-real)"),
+    ])
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
     reasons = reasons_from_features("image", features, fake_probability)
@@ -261,7 +277,7 @@ def analyze_image(file_path, filename, size_bytes):
         "noise": 1.0 - texture_score,
     }
     trust = trust_score(fake_probability, factors)
-    explanation = explain_short("image", result, fake_probability)
+    explanation = explain_short("image", result, fake_probability) + provider_note
     recommendations = _recommendations(result)
 
     elapsed = int((time.time() - start) * 1000)
@@ -287,6 +303,7 @@ def analyze_image(file_path, filename, size_bytes):
         "model": "heuristic-vision-v1",
         "heatmap_available": True,
         "kaggle_reference": kaggle_info,
+        "ai_providers": {"gemini": gemini, "local": local},
         "verified": False,
     }
 

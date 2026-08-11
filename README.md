@@ -307,6 +307,27 @@ reported in every result as `kaggle_reference` / `kaggle_reference_status`.
 
 Add your own via `KAGGLE_EXTRA_DATASETS=user/dataset1,user/dataset2` in `.env`.
 
+### Train real models on Kaggle's GPU cloud (no local download)
+
+Instead of downloading datasets, the app can push a training notebook to
+Kaggle and let the dataset be mounted **on Kaggle's own machine**:
+
+1. `POST /api/model/train` with `{"media": "image"}` (admin) → pushes
+   `backend/ml/trainers/<media>_trainer.py` as a private Kaggle kernel.
+2. Kaggle mounts the dataset via kagglehub on its cloud, trains on GPU, and
+   computes a holdout test accuracy inside the notebook.
+3. The app polls the kernel and pulls back **only the trained weights**
+   (`model.pth` / `model.pkl` + `model_info.json`) into `backend/models/<media>/`.
+   No dataset is ever stored in the project.
+
+Endpoints (admin): `POST /api/model/train`, `GET /api/model/train/<media>`,
+`POST /api/model/train/<media>/download`, `GET /api/model/weights`,
+`GET /api/model/health`.
+
+Requires the `kaggle` client + credentials:
+`pip install -r requirements.txt -r requirements-ai.txt`, then set
+`KAGGLE_USERNAME` / `KAGGLE_KEY` in `backend/.env`.
+
 ### How the heuristic engines work (no model weights needed)
 
 - **Image**: Error Level Analysis (recompression artifacts), pHash-based

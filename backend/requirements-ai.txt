@@ -5,3 +5,10 @@ opencv-python==4.10.0.84
 librosa==0.10.2
 mediapipe
 kaggle==2.2.4
+# Local offline AI models (image ViT + RoBERTa text detector) - optional.
+# First scan auto-downloads weights to the Hugging Face cache (~500 MB).
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.40.0
+timm>=0.9.0
+soundfile>=0.12.0

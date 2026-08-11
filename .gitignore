@@ -32,6 +32,7 @@ backend/reports/*
 !backend/reports/.gitkeep
 backend/security/logs/*
 backend/ml/*.json
+backend/models/*
 
 # ---------- Logs / OS ----------
 *.log
