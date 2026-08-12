@@ -17,7 +17,7 @@ import DeepfakeTimeline from "../components/DeepfakeTimeline";
 import api from "../api/api";
 import { formatDate, riskColor, humanSize } from "../utils/format";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001/api";
 
 export default function Results() {
   const { scanId } = useParams();
@@ -27,7 +27,6 @@ export default function Results() {
   const [loading, setLoading] = useState(!scan);
   const [downloading, setDownloading] = useState(false);
   const [proof, setProof] = useState(null);
-  const [proofLoading, setProofLoading] = useState(false);
   const [proofError, setProofError] = useState("");
   const [registering, setRegistering] = useState(false);
   const [heatmapUrl, setHeatmapUrl] = useState(null);
@@ -56,19 +55,6 @@ export default function Results() {
       api.get(`/history/${scanId}`).then((res) => setFull(res.data.scan)).catch(() => {});
     }
   }, [scanId, scan]);
-
-  const checkProof = async () => {
-    setProofLoading(true);
-    setProofError("");
-    try {
-      const { data } = await api.get(`/evidence/verify/${scanId}`);
-      setProof(data);
-    } catch (e) {
-      setProofError(e.response?.data?.message || e.message);
-    } finally {
-      setProofLoading(false);
-    }
-  };
 
   const registerCase = async () => {
     setRegistering(true);
@@ -203,9 +189,9 @@ export default function Results() {
           <button onClick={() => download("qr")} disabled={downloading} className="btn-secondary">
             <QrCodeIcon className="w-5 h-5" /> QR Code
           </button>
-          <button onClick={checkProof} disabled={proofLoading} className="btn-secondary">
-            <LockClosedIcon className="w-5 h-5" /> {proofLoading ? "Checking…" : proof ? "Re-verify" : "Verify Proof"}
-          </button>
+          <Link to={`/verify/scan/${scanId}`} className="btn-secondary">
+            <LockClosedIcon className="w-5 h-5" /> Verify Proof
+          </Link>
         </div>
 
         {/* Blockchain proof */}

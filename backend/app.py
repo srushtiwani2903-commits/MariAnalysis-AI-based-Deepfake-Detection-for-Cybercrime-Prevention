@@ -1,7 +1,7 @@
 ﻿"""MariAnalysis - Flask app factory and entry point.
 
 Local:   python run.py
-Prod:    gunicorn -w 4 -b 0.0.0.0:5000 app:app
+Prod:    gunicorn -w 4 -b 0.0.0.0:5001 app:app
 """
 import os
 from datetime import datetime, timezone
@@ -316,4 +316,4 @@ def _purge_stale_uploads(app):
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=Config.DEBUG)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)), debug=Config.DEBUG)

@@ -2,7 +2,7 @@
 // Listens for context-menu clicks on images and calls the /api/keys/extend/analyze
 // endpoint with the user's stored API key.
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "http://localhost:5001/api";
 
 // --- Context menu ------------------------------------------------------------------
 chrome.runtime.onInstalled.addListener(() => {

@@ -8,6 +8,9 @@ import {
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
+const formatSize = (maxMB) =>
+  maxMB >= 1024 ? `${maxMB / 1024} GB` : `${maxMB} MB`;
+
 // Drag & drop uploader with live progress + validation
 export default function FileUpload({
   accept,
@@ -55,7 +58,7 @@ export default function FileUpload({
       return false;
     }
     if (f.size > maxMB * 1024 * 1024) {
-      setError(`File exceeds the ${maxMB} MB limit.`);
+      setError(`File exceeds the ${formatSize(maxMB)} limit. Not more than ${formatSize(maxMB)} will accept.`);
       return false;
     }
     setError("");
@@ -92,7 +95,7 @@ export default function FileUpload({
         <CloudArrowUpIcon className="w-14 h-14 mx-auto text-neon-blue mb-3" />
         <p className="font-semibold text-lg">{drag ? "Release to upload" : label}</p>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          {hint || `Click or drag & drop · Max ${maxMB} MB · ${accept}`}
+          {hint || `Click or drag & drop · Max ${formatSize(maxMB)} · ${accept}`}
         </p>
         <input
           ref={inputRef}

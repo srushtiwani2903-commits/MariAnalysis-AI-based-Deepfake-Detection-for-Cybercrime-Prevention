@@ -157,7 +157,7 @@ pip install -r requirements-ai.txt
 copy .env.example .env                   # Windows
 # cp .env.example .env                   # macOS / Linux
 
-python run.py                            # starts on http://localhost:5000
+python run.py                            # starts on http://localhost:5001
 ```
 
 The first run auto-creates the SQLite database and a default admin account
@@ -171,7 +171,7 @@ npm install
 npm start                                # starts on http://localhost:3000
 ```
 
-> The frontend proxies `/api` to `http://localhost:5000` during development.
+> The frontend proxies `/api` to `http://localhost:5001` during development.
 > For production set `REACT_APP_API_URL` (see `.env.example`).
 
 ### 3) Auto-start on every login (one-time, per machine)
@@ -192,7 +192,7 @@ powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
 
 ## 🔌 API Endpoints (summary)
 
-Base URL: `http://localhost:5000/api` — all protected endpoints require
+Base URL: `http://localhost:5001/api` — all protected endpoints require
 `Authorization: Bearer <token>`.
 
 | Method | Endpoint                       | Description                          |
@@ -364,7 +364,7 @@ requirements.txt).
 # build backend with AI deps included
 docker compose build --build-arg INSTALL_AI_DEPS=1
 docker compose up -d
-# backend  -> http://localhost:5000
+# backend  -> http://localhost:5001
 # frontend -> http://localhost:3000
 ```
 

@@ -4,7 +4,7 @@ import api from "../api/api";
 
 const AuthContext = createContext({});
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001/api";
 
 // Message the login page shows after a single-session forced logout.
 const LOGOUT_MESSAGE = "You have been logged out because your account was signed in on another device.";

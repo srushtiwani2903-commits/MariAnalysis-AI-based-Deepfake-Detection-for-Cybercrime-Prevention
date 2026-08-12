@@ -109,7 +109,7 @@ def extend_analyze():
     if ext not in Config.ALLOWED_IMAGE:
         return jsonify({"message": "Only image analysis is supported by the extension."}), 400
     file = FileStorage(stream=stream, filename=f"ext.{ext}")
-    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_CONTENT_LENGTH, 10 * 1024 * 1024))
+    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_IMAGE_BYTES, 10 * 1024 * 1024))
     if not ok:
         return jsonify({"message": msg}), 400
     path, stored_name, _ = save_upload(file, Config.UPLOAD_FOLDER, file.filename)

@@ -249,8 +249,8 @@ def generate_csv_report(scan, case=None) -> str:
 
 def generate_qr_content(scan) -> str:
     """Build a shareable verification string encoded into the QR code."""
-    base = "https://marianalysis.ai/verify/"
-    return f"{base}scan/{scan.id}?r={scan.result}&c={scan.confidence:.1f}&p={scan.fake_probability:.1f}"
+    from config import Config
+    return f"{Config.FRONTEND_URL}/verify/scan/{scan.id}"
 
 
 def generate_qr_image(scan, out_dir: str) -> str:

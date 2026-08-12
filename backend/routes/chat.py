@@ -1,10 +1,16 @@
-"""Rule-based deepfake awareness chatbot.
+"""Deepfake awareness chatbot with a real LLM backend.
 
-Answers questions about deepfakes, scams, voice cloning, media safety and
-cyber laws via keyword intent matching with a safe fallback. Stateless and
-sanitised server-side.
+When GEMINI_API_KEY is set, /api/chat answers ANY question via Google Gemini
+(like ChatGPT / Gemini) with conversation context. Without a key, or if the
+LLM call fails, it falls back to the built-in rule-based keyword matcher so
+the assistant always answers.
 """
+import json
+import logging
 import re
+import time
+import urllib.error
+import urllib.request
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -13,6 +19,12 @@ from config import Config
 from utils.security import limiter, sanitize_string
 
 chat_bp = Blueprint("chat", __name__)
+
+_log = logging.getLogger("chat.gemini")
+
+# Skip Gemini for a while after a quota/auth error so the assistant answers
+# fast (via the fallback) instead of waiting on the API every time.
+_gemini_blocked_until = 0.0
 
 # (keywords, intent, reply)
 _KB = [
@@ -89,12 +101,83 @@ _KB = [
      "reporting cybercrime, cyber laws, or how to use the detectors - I can guide you."),
 ]
 
+_SYSTEM_PROMPT = (
+    "You are DeepGuard, the friendly AI assistant for MariAnalysis - an AI-based deepfake "
+    "detection platform for cybercrime prevention. You help users understand deepfakes, detect "
+    "AI-generated or manipulated media, avoid scams, recognise voice cloning and phishing, report "
+    "cybercrime, and understand relevant cyber laws (India's IT Act 2000, IPC 419/420, DPDP Act). "
+    "You can also answer general questions like any helpful assistant. Be clear, warm, concise "
+    "(aim for 3-8 sentences unless asked for detail), and stay factual. If a user seems to be "
+    "asking about a real emergency or crime in progress, encourage them to contact local "
+    "authorities or India's cybercrime helpline 1930. Treat detection results as forensic "
+    "guidance, not legal proof."
+)
+
+_ROLE_MAP = {"ai": "model", "assistant": "model", "model": "model", "user": "user"}
+
+
+def _ask_gemini(contents):
+    """Call the Gemini generateContent REST API. Returns reply text or None."""
+    global _gemini_blocked_until
+    if not Config.GEMINI_API_KEY:
+        return None
+    now = time.time()
+    if now < _gemini_blocked_until:
+        return None
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{Config.GEMINI_MODEL}:generateContent?key={Config.GEMINI_API_KEY}"
+    )
+    payload = {
+        "systemInstruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": Config.GEMINI_MAX_OUTPUT_TOKENS,
+        },
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=Config.GEMINI_TIMEOUT_SECONDS) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code in (429, 403):
+            _gemini_blocked_until = now + 600
+            _log.warning("Gemini %s (quota/auth) - cooldown 10min", e.code)
+        else:
+            _log.warning("Gemini HTTP %s: %s", e.code, e.read(300).decode("utf-8", "replace"))
+        return None
+    except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as e:
+        _log.warning("Gemini request failed: %s", e)
+        return None
+    candidates = body.get("candidates") or []
+    if not candidates:
+        _log.warning("Gemini returned no candidates")
+        return None
+    parts = candidates[0].get("content", {}).get("parts") or []
+    text = "".join(p.get("text", "") for p in parts).strip()
+    return text or None
+
 
 def _match(text):
     for keywords, intent, reply in _KB:
         if any(k in text for k in keywords):
             return intent, reply
     return "unknown", None
+
+
+def _fallback_reply(intent):
+    for _, i, reply in _KB:
+        if i == intent:
+            return reply
+    return ("I can help with deepfake detection, scam prevention, voice cloning, reporting "
+            "cybercrime, cyber laws and the MariAnalysis tools. Try asking e.g. "
+            "'How do I avoid deepfake scams?' or 'What is a voice clone?'")
 
 
 @chat_bp.route("", methods=["POST"])
@@ -106,13 +189,27 @@ def chat():
     message = sanitize_string(data.get("message", ""), 500).strip()
     if not message:
         return jsonify({"message": "Please type a question."}), 400
+
+    # Build the conversation for the LLM from the last few turns (if supplied).
+    history = data.get("history") or []
+    contents = []
+    if isinstance(history, list):
+        for turn in history[-12:]:
+            role = str(turn.get("role", "")).lower()
+            text = sanitize_string(turn.get("text", ""), 500).strip()
+            if role in _ROLE_MAP and text:
+                contents.append({"role": _ROLE_MAP[role], "parts": [{"text": text}]})
+    contents.append({"role": "user", "parts": [{"text": message}]})
+
+    reply = _ask_gemini(contents)
+    if reply:
+        return jsonify({"reply": reply, "intent": "gemini", "source": "gemini"})
+
     text = message.lower()
-    intent, reply = _match(text)
-    if not reply:
-        reply = ("I can help with deepfake detection, scam prevention, voice cloning, reporting "
-                 "cybercrime, cyber laws and the MariAnalysis tools. Try asking e.g. "
-                 "'How do I avoid deepfake scams?' or 'What is a voice clone?'")
-    return jsonify({"reply": reply, "intent": intent})
+    intent, rule_reply = _match(text)
+    if not rule_reply:
+        rule_reply = _fallback_reply(intent)
+    return jsonify({"reply": rule_reply, "intent": intent, "source": "rules"})
 
 
 @chat_bp.route("/suggestions", methods=["GET"])

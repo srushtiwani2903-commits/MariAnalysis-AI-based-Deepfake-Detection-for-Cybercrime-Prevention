@@ -21,6 +21,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 
 const navLinks = [
+  { to: "/verify", label: "Verify Proof", icon: ShieldExclamationIcon, protected: false },
   { to: "/dashboard", labelKey: "dashboard", icon: ChartBarIcon, protected: true },
   { to: "/detect", label: "Scan", icon: BeakerIcon, protected: true },
   { to: "/detect/realtime", label: "Live Cam", icon: VideoCameraIcon, protected: true },

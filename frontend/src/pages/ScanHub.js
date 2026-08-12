@@ -9,36 +9,39 @@ import FileUpload from "../components/FileUpload";
 import ScanLoader from "../components/ScanLoader";
 import api from "../api/api";
 
+const GB = 1024;
 const MEDIA = [
   {
     key: "image", title: "Image", desc: "PNG, JPG, WebP, BMP, TIFF",
     icon: PhotoIcon, color: "from-neon-blue to-cyan-400",
-    accept: ".png,.jpg,.jpeg,.webp,.bmp,.tiff", maxMB: 50,
+    accept: ".png,.jpg,.jpeg,.webp,.bmp,.tiff", maxMB: 1 * GB,
     loader: "Running error-level analysis, texture stats and metadata forensics…",
     engine: "Kaggle reference: real-and-fake-face-detection",
   },
   {
     key: "video", title: "Video", desc: "MP4, AVI, MOV, MKV, WebM",
     icon: FilmIcon, color: "from-neon-purple to-fuchsia-500",
-    accept: ".mp4,.avi,.mov,.mkv,.webm", maxMB: 200,
+    accept: ".mp4,.avi,.mov,.mkv,.webm", maxMB: 20 * GB,
     loader: "Extracting frames, detecting faces, running temporal analysis…",
     engine: "Kaggle reference: deepfake-videos-dataset",
   },
   {
     key: "audio", title: "Audio", desc: "MP3, WAV, OGG, FLAC, M4A",
     icon: MusicalNoteIcon, color: "from-pink-500 to-rose-400",
-    accept: ".mp3,.wav,.ogg,.flac,.m4a", maxMB: 100,
+    accept: ".mp3,.wav,.ogg,.flac,.m4a", maxMB: 10 * GB,
     loader: "Computing spectrogram, spectral flatness and MFCC features…",
     engine: "Kaggle reference: audio-deepfake-detection-dataset",
   },
   {
     key: "text", title: "Text", desc: "Paste or type content",
     icon: DocumentTextIcon, color: "from-amber-400 to-orange-500",
-    accept: ".txt,.md,.csv", maxMB: 5,
+    accept: ".txt,.md,.csv", maxMB: 20 * GB,
     loader: "Computing perplexity, burstiness and sentence anomaly scores…",
     engine: "Kaggle reference: ai-vs-human-text-classification",
   },
 ];
+
+const MAX_TEXT_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB
 
 export default function ScanHub() {
   const navigate = useNavigate();
@@ -67,6 +70,10 @@ export default function ScanHub() {
   };
 
   const analyzeText = async () => {
+    if (new Blob([text]).size > MAX_TEXT_BYTES) {
+      setError("Text exceeds the 20 GB limit. Not more than 20 GB will accept.");
+      return;
+    }
     setError("");
     setAnalyzing(true);
     try {

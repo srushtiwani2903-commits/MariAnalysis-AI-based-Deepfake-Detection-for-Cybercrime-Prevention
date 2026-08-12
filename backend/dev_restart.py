@@ -58,10 +58,10 @@ def start_server():
         stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
     )
-    if port_free(5000):
+    if port_free(5001):
         log(f"backend up (pid {proc.pid})")
     else:
-        log(f"backend pid {proc.pid} started but port 5000 did not open")
+        log(f"backend pid {proc.pid} started but port 5001 did not open")
     return proc
 
 
@@ -75,7 +75,7 @@ def stop_server(proc):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             log("could not stop backend cleanly")
-    port_free(5000)
+    port_free(5001)
 
 
 def main():

@@ -123,6 +123,14 @@ def sniff_matches_magic(extension: str, head: bytes) -> bool:
     return ext in {"jpg", "jpeg", "png", "bmp", "tiff", "webp", "mp4", "avi", "mov", "wav", "flac", "m4a"}
 
 
+def format_limit(max_bytes: int) -> str:
+    """Format a byte cap as '1 GB' / '500 MB' for user-facing messages."""
+    gb = max_bytes / (1024 ** 3)
+    if gb >= 1:
+        return f"{int(gb)} GB" if gb == int(gb) else f"{gb:.1f} GB"
+    return f"{max_bytes // (1024 * 1024)} MB"
+
+
 def validate_upload(file_storage, allowed_exts: set, max_bytes: int):
     """Validate an uploaded file. Returns (ok, error_message, size_bytes)."""
     if not file_storage or not file_storage.filename:
@@ -144,7 +152,8 @@ def validate_upload(file_storage, allowed_exts: set, max_bytes: int):
         size += len(chunk)
         if size > max_bytes:
             file_storage.stream.seek(0)
-            return False, f"File exceeds the {max_bytes // (1024*1024)} MB limit.", size
+            limit = format_limit(max_bytes)
+            return False, f"File exceeds the {limit} limit. Not more than {limit} will accept.", size
     file_storage.stream.seek(0)
     if size == 0:
         return False, "Empty file uploaded.", 0

@@ -5,6 +5,8 @@ import { DocumentTextIcon, ExclamationTriangleIcon, SparklesIcon } from "@heroic
 import ScanLoader from "../components/ScanLoader";
 import api from "../api/api";
 
+const MAX_TEXT_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB
+
 export default function TextDetection() {
   const navigate = useNavigate();
   const [text, setText] = useState("");
@@ -12,6 +14,10 @@ export default function TextDetection() {
   const [error, setError] = useState("");
 
   const analyze = async () => {
+    if (new Blob([text]).size > MAX_TEXT_BYTES) {
+      setError("Text exceeds the 20 GB limit. Not more than 20 GB will accept.");
+      return;
+    }
     setError("");
     setAnalyzing(true);
     try {

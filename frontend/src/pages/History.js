@@ -52,7 +52,7 @@ export default function History() {
 
   const download = (id, fmt) => {
     const token = localStorage.getItem("deepguard-token");
-    fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000/api"}/reports/${id}/${fmt}`, {
+    fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5001/api"}/reports/${id}/${fmt}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.blob())

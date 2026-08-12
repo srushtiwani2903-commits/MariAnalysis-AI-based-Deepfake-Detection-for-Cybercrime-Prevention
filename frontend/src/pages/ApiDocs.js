@@ -11,7 +11,7 @@ export default function ApiDocs() {
     api.get("/docs").then((res) => setEndpoints(res.data.endpoints)).catch(() => {});
   }, []);
 
-  const base = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+  const base = process.env.REACT_APP_API_URL || "http://localhost:5001/api";
 
   return (
     <div className="container-app py-12 max-w-5xl">

@@ -91,7 +91,7 @@ def detect_image():
     if _rate_limit():
         return jsonify({"message": "Too many requests. Try again later."}), 429
     file = request.files.get("file")
-    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, Config.MAX_CONTENT_LENGTH)
+    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, Config.MAX_IMAGE_BYTES)
     if not ok:
         return jsonify({"message": msg}), 400
     path, stored_name, size = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
@@ -107,7 +107,7 @@ def detect_video():
     if _rate_limit():
         return jsonify({"message": "Too many requests. Try again later."}), 429
     file = request.files.get("file")
-    ok, msg, size = validate_upload(file, Config.ALLOWED_VIDEO, Config.MAX_CONTENT_LENGTH)
+    ok, msg, size = validate_upload(file, Config.ALLOWED_VIDEO, Config.MAX_VIDEO_BYTES)
     if not ok:
         return jsonify({"message": msg}), 400
     path, stored_name, size = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
@@ -123,7 +123,7 @@ def detect_audio():
     if _rate_limit():
         return jsonify({"message": "Too many requests. Try again later."}), 429
     file = request.files.get("file")
-    ok, msg, size = validate_upload(file, Config.ALLOWED_AUDIO, Config.MAX_CONTENT_LENGTH)
+    ok, msg, size = validate_upload(file, Config.ALLOWED_AUDIO, Config.MAX_AUDIO_BYTES)
     if not ok:
         return jsonify({"message": msg}), 400
     path, stored_name, size = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
@@ -139,7 +139,10 @@ def detect_text():
     if _rate_limit():
         return jsonify({"message": "Too many requests. Try again later."}), 429
     data = request.get_json(silent=True) or {}
-    text = sanitize_text(data.get("text", ""))
+    text = data.get("text", "")
+    if len(text.encode("utf-8")) > Config.MAX_TEXT_BYTES:
+        return jsonify({"message": "Text exceeds the 20 GB limit. Not more than 20 GB will accept."}), 400
+    text = sanitize_text(text)
     if len(text.strip()) < 30:
         return jsonify({"message": "Please provide at least 30 characters of text."}), 400
     filename = sanitize_text(data.get("filename", ""), 120) or "text-input.txt"
@@ -176,7 +179,7 @@ def detect_post():
     if _rate_limit():
         return jsonify({"message": "Too many requests. Try again later."}), 429
     file = request.files.get("file")
-    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, Config.MAX_CONTENT_LENGTH)
+    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, Config.MAX_IMAGE_BYTES)
     if not ok:
         return jsonify({"message": msg}), 400
     caption = sanitize_text(request.form.get("caption", ""), 5_000)
@@ -199,7 +202,7 @@ def detect_realtime():
     if _rate_limit():
         return jsonify({"message": "Too many requests. Try again later."}), 429
     file = request.files.get("file")
-    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_CONTENT_LENGTH, 5 * 1024 * 1024))
+    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_IMAGE_BYTES, 5 * 1024 * 1024))
     if not ok:
         return jsonify({"message": msg}), 400
     path, stored_name, _ = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
@@ -268,6 +271,16 @@ def detect_url():
 
     if not allowed[media_type].__contains__(ext):
         return jsonify({"message": f"File type not allowed for {media_type} detection."}), 400
+
+    per_type_max = {
+        "image": Config.MAX_IMAGE_BYTES,
+        "video": Config.MAX_VIDEO_BYTES,
+        "audio": Config.MAX_AUDIO_BYTES,
+    }.get(media_type, Config.MAX_CONTENT_LENGTH)
+    if size > per_type_max:
+        from utils.security import format_limit
+        limit = format_limit(per_type_max)
+        return jsonify({"message": f"File exceeds the {limit} limit. Not more than {limit} will accept."}), 400
 
     from werkzeug.datastructures import FileStorage
     file = FileStorage(stream=stream, filename=f"remote.{ext}")

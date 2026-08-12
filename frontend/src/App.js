@@ -22,6 +22,7 @@ import RealtimeCam from "./pages/RealtimeCam";
 import EmailDetection from "./pages/EmailDetection";
 import SocialPostDetection from "./pages/SocialPostDetection";
 import Evidence from "./pages/Evidence";
+import VerifyProof from "./pages/VerifyProof";
 import OrgDashboard from "./pages/OrgDashboard";
 import Results from "./pages/Results";
 import History from "./pages/History";
@@ -86,6 +87,8 @@ function AnimatedRoutes() {
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/docs" element={<ApiDocs />} />
+          <Route path="/verify" element={<VerifyProof />} />
+          <Route path="/verify/:type/:id" element={<VerifyProof />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </motion.main>

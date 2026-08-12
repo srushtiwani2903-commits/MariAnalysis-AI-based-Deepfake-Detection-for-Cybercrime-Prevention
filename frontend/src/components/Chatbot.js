@@ -22,11 +22,12 @@ export default function Chatbot() {
   const send = async (text) => {
     const q = (text ?? input).trim();
     if (!q || typing) return;
+    const history = messages.slice(-10).map((m) => ({ role: m.role, text: m.text }));
     setMessages((m) => [...m, { role: "user", text: q }]);
     setInput("");
     setTyping(true);
     try {
-      const { data } = await api.post("/chat", { message: q });
+      const { data } = await api.post("/chat", { message: q, history });
       setMessages((m) => [...m, { role: "ai", text: data.reply || "Sorry, I couldn't parse that." }]);
     } catch {
       setMessages((m) => [...m, { role: "ai", text: "I'm having trouble connecting. Please try again." }]);

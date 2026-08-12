@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Right-click any image to check it for AI-generated / deepfake content using the MariAnalysis API.",
   "permissions": ["contextMenus", "storage", "notifications"],
-  "host_permissions": ["http://localhost:5000/*"],
+  "host_permissions": ["http://localhost:5001/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [
     {

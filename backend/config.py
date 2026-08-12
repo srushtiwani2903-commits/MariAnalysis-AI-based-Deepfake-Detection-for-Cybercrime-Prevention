@@ -33,7 +33,20 @@ class Config:
     HEATMAP_FOLDER = os.path.join(BASE_DIR, os.environ.get("HEATMAP_FOLDER", "reports/heatmaps"))
     # Uploaded media is kept for forensic re-download, then auto-purged.
     UPLOAD_RETENTION_DAYS = int(os.environ.get("UPLOAD_RETENTION_DAYS", 7))
-    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", 50)) * 1024 * 1024
+
+    # Per-media-type upload caps: image 1 GB, video 20 GB, text 20 GB, audio 10 GB.
+    IMAGE_MAX_MB = int(os.environ.get("IMAGE_MAX_MB", 1024))
+    VIDEO_MAX_MB = int(os.environ.get("VIDEO_MAX_MB", 20480))
+    TEXT_MAX_MB = int(os.environ.get("TEXT_MAX_MB", 20480))
+    AUDIO_MAX_MB = int(os.environ.get("AUDIO_MAX_MB", 10240))
+    MAX_IMAGE_BYTES = IMAGE_MAX_MB * 1024 * 1024
+    MAX_VIDEO_BYTES = VIDEO_MAX_MB * 1024 * 1024
+    MAX_TEXT_BYTES = TEXT_MAX_MB * 1024 * 1024
+    MAX_AUDIO_BYTES = AUDIO_MAX_MB * 1024 * 1024
+    # Flask's MAX_CONTENT_LENGTH is the hard global cap on the request body;
+    # it must be at least the largest per-media-type limit.
+    MAX_CONTENT_LENGTH = max(
+        MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, MAX_TEXT_BYTES, MAX_AUDIO_BYTES)
     ALLOWED_IMAGE = {"png", "jpg", "jpeg", "webp", "bmp", "tiff"}
     ALLOWED_VIDEO = {"mp4", "avi", "mov", "mkv", "webm"}
     ALLOWED_AUDIO = {"mp3", "wav", "ogg", "flac", "m4a"}
@@ -101,6 +114,14 @@ class Config:
     OTP_TTL_SECONDS = int(os.environ.get("OTP_TTL_SECONDS", 600))
     OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", 5))
     DEBUG_OTP = os.environ.get("DEBUG_OTP", "true").lower() == "true"
+
+    # --- AI assistant (Gemini) ---
+    # Set GEMINI_API_KEY to power the /api/chat assistant with Google Gemini.
+    # Without a key the chatbot falls back to the built-in rule-based replies.
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", 25))
+    GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", 1024))
 
     # --- MSG91 SMS (India) ---
     MSG91_AUTHKEY = os.environ.get("MSG91_AUTHKEY", "")
