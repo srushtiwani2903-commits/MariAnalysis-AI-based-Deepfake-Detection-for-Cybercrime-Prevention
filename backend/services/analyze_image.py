@@ -13,8 +13,9 @@ from PIL import Image, ImageChops, ImageStat
 from PIL.ExifTags import TAGS
 
 from config import Config
-from services.ensemble import (build_models, explain_short, reasons_from_features,
-                               risk_label, trust_score)
+from services.ensemble import (build_models, classify_ai_origin, explain_short,
+                               reasons_from_features, risk_label, suspicious_scale,
+                               trust_score)
 
 
 def _average_hash(image, hash_size=16):
@@ -181,6 +182,15 @@ def analyze_image(file_path, filename, size_bytes):
             return _pack_failure("Unsupported or corrupted image file.")
 
         _ela_rms, diff = _error_level_analysis(img)
+        # Spatial variance of the ELA difference map: high values mean the
+        # recompression error is concentrated in patches -> localised AI edits
+        # (face-swap, inpainting, enhancement) rather than a uniform synthetic source.
+        try:
+            import numpy as np
+            diff_arr = np.asarray(diff.convert("L"), dtype=np.float32)
+            ela_local_variance = float(min(1.0, diff_arr.std() / 30.0))
+        except Exception:  # noqa: BLE001
+            ela_local_variance = 0.0
         shared = feature_vector(img)
 
     meta = _extract_metadata(file_path)
@@ -212,6 +222,7 @@ def analyze_image(file_path, filename, size_bytes):
 
     features = {
         "error_level_analysis": round(ela_score, 4),
+        "ela_local_variance": round(ela_local_variance, 4),
         "texture_uniformity": round(texture_score, 4),
         "metadata_anomaly": round(meta_score, 4),
         "recompression_similarity": round(recomp_score, 4),
@@ -251,6 +262,8 @@ def analyze_image(file_path, filename, size_bytes):
     models, fake_probability = build_models("image", base * 100, filename, spread=4.0)
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
+    ai_origin = classify_ai_origin("image", features, fake_probability)
+    susp = suspicious_scale(fake_probability, ai_origin, features, "image")
     reasons = reasons_from_features("image", features, fake_probability)
     factors = {
         "metadata": 1.0 - meta_score,
@@ -261,6 +274,11 @@ def analyze_image(file_path, filename, size_bytes):
     }
     trust = trust_score(fake_probability, factors)
     explanation = explain_short("image", result, fake_probability)
+    if ai_origin == "ai_manipulated":
+        explanation += (" The file appears to have been converted or edited using AI tools "
+                        "(localised artifacts detected), which raises the suspicion scale.")
+    elif ai_origin == "ai_generated":
+        explanation += " The content shows hallmarks of being generated entirely by AI."
     recommendations = _recommendations(result)
 
     elapsed = int((time.time() - start) * 1000)
@@ -269,6 +287,10 @@ def analyze_image(file_path, filename, size_bytes):
         "filename": filename,
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
+        "suspicious_scale": susp,
+        "ai_origin": ai_origin,
+        "ai_generated": ai_origin == "ai_generated",
+        "ai_manipulated": ai_origin == "ai_manipulated",
         "fake_probability": round(fake_probability, 1),
         "trust_score": trust,
         "risk_level": risk,

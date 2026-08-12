@@ -31,6 +31,8 @@ def _store_scan(user_id, scan_type, filename, original_filename, file_path, file
     metadata = dict(result.get("metadata", {}))
     metadata["reference_dataset"] = result.get("reference_dataset", "")
     metadata["reference_source"] = result.get("reference_source", "")
+    metadata["ai_origin"] = result.get("ai_origin", "")
+    metadata["suspicious_scale"] = result.get("suspicious_scale", 0)
     if result.get("heatmap_file"):
         metadata["heatmap_file"] = result.get("heatmap_file")
     scan = ScanHistory(

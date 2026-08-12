@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ClockIcon, DocumentArrowDownIcon,
   ScaleIcon, BeakerIcon, FingerPrintIcon, QrCodeIcon, ShieldCheckIcon,
-  LockClosedIcon, CubeIcon,
+  LockClosedIcon, CubeIcon, CpuChipIcon, WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import ResultBadge from "../components/ResultBadge";
 import ConfidenceBar from "../components/ConfidenceBar";
@@ -101,6 +101,11 @@ export default function Results() {
   const models = full?.models || scan.models || [];
   const reasons = full?.reasons || scan.reasons || [];
   const heatmapFile = full?.scan_metadata?.heatmap_file || scan.scan_metadata?.heatmap_file;
+  const meta = full?.scan_metadata || scan.scan_metadata || {};
+  const aiOrigin = meta.ai_origin || scan.ai_origin || "";
+  const suspiciousScale = meta.suspicious_scale !== undefined && meta.suspicious_scale !== ""
+    ? Number(meta.suspicious_scale)
+    : (scan.suspicious_scale ?? scan.fake_probability);
   const summary = `${scan.result} ${scan.filename} confidence ${Math.round(scan.confidence)}% fake probability ${Math.round(scan.fake_probability)}%. ${scan.explanation || ""}`;
 
   return (
@@ -124,6 +129,29 @@ export default function Results() {
         <div className="grid lg:grid-cols-2 gap-8 items-center">
           <div className="space-y-5">
             <ResultBadge result={scan.result} confidence={scan.confidence} />
+            {aiOrigin && aiOrigin !== "authentic" && (
+              <div className={`inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl border ${
+                aiOrigin === "ai_generated"
+                  ? "text-rose-300 border-rose-400/40 bg-rose-400/10"
+                  : "text-amber-300 border-amber-400/40 bg-amber-400/10"
+              }`}>
+                {aiOrigin === "ai_generated"
+                  ? <CpuChipIcon className="w-7 h-7" />
+                  : <WrenchScrewdriverIcon className="w-7 h-7" />}
+                <div>
+                  <p className="font-bold text-base leading-none">
+                    {aiOrigin === "ai_generated"
+                      ? `AI GENERATED ${scan.scan_type?.toUpperCase()}`
+                      : "AI CONVERTED / MANIPULATED"}
+                  </p>
+                  <p className="text-xs opacity-80 mt-1">
+                    {aiOrigin === "ai_generated"
+                      ? "Created entirely by an AI generator"
+                      : "Authentic media converted or edited using AI tools"}
+                  </p>
+                </div>
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-bold truncate">{scan.filename}</h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -153,8 +181,15 @@ export default function Results() {
           {/* Confidence meters */}
           <div className="space-y-5">
             <ConfidenceBar value={scan.confidence} label={`Result Confidence (${scan.result})`} />
+            <ConfidenceBar value={suspiciousScale} label="Suspicious Scale" />
             <ConfidenceBar value={scan.fake_probability} label="AI / Fake Probability" />
             <ConfidenceBar value={100 - scan.confidence} label="Alternative Likelihood" />
+            {suspiciousScale > scan.fake_probability && (
+              <p className="text-xs text-amber-300 bg-amber-400/10 border border-amber-400/30 rounded-xl px-4 py-3 flex items-center gap-2">
+                <WrenchScrewdriverIcon className="w-4 h-4" />
+                Suspicion boosted because AI tools were likely used to convert or edit this media.
+              </p>
+            )}
           </div>
         </div>
 

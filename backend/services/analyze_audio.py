@@ -10,8 +10,9 @@ import os
 import struct
 import time
 
-from services.ensemble import (build_models, explain_short, reasons_from_features,
-                               risk_label, trust_score)
+from services.ensemble import (build_models, classify_ai_origin, explain_short,
+                               reasons_from_features, risk_label, suspicious_scale,
+                               trust_score)
 
 
 def _read_wav_header(path):
@@ -84,32 +85,53 @@ def analyze_audio(file_path, filename, size_bytes):
         sf = features["spectral_flatness"]
         zcr = features["zero_crossing_rate"]
         mfcc_var = features["mfcc_variance"]
-        # Synthetic voice: unusually flat spectrum, low zero-crossing rate,
-        # suspiciously low/high MFCC variance (over-smooth prosody).
+        # Synthetic voice: unusually flat spectrum, near-zero zero-crossing
+        # rate, and unnaturally flat prosody (low MFCC variance).
         flat = max(0.0, min(1.0, sf / 0.4))
-        monotone = max(0.0, min(1.0, (1.0 - zcr * 0.10)))
-        prosody = max(0.0, min(1.0, (mfcc_var - 10.0) / 60.0)) if mfcc_var < 70 else 0.8
+        # Real speech carries a healthy zero-crossing rate (~0.03-0.15); only
+        # a very low ZCR reads as robotic, so the old `1 - zcr*0.10` (which
+        # flagged real audio) is replaced with a low-tail threshold.
+        monotone = max(0.0, min(1.0, (0.035 - zcr) / 0.03))
+        # Expressive human speech has meaningful MFCC variance; only low
+        # variance (flat/robotic prosody) is suspicious.
+        if mfcc_var < 15:
+            prosody = 0.9
+        elif mfcc_var < 60:
+            prosody = max(0.0, min(1.0, (60.0 - mfcc_var) / 45.0))
+        else:
+            prosody = 0.0
         features["prosody_variance"] = round(1.0 - prosody, 4)
         base = (0.40 * flat + 0.30 * monotone + 0.30 * prosody)
     else:
-        # Degraded fallback: deterministic hash of header + size.
-        seed = int.from_bytes(hashlib_safe(file_path), "big") % 100
-        base = (20 + (seed % 60)) / 100.0
-        features["prosody_variance"] = round(1.0 - base, 4)
+        # Degraded fallback: the file could not be decoded for spectral
+        # analysis, so report "inconclusive" honestly instead of a guess.
+        base = 0.50
+        features["prosody_variance"] = 0.5
+        features["decode_error"] = True
 
     models, fake_probability = build_models("audio", base * 100, filename, spread=4.5)
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
+    ai_origin = classify_ai_origin("audio", features, fake_probability)
+    susp = suspicious_scale(fake_probability, ai_origin, features, "audio")
     reasons = reasons_from_features("audio", features, fake_probability)
     trust = trust_score(fake_probability, {
-        "spectral_detail": 1.0 - float(features.get("spectral_flatness", 0) / 0.4),
+        "spectral_detail": 1.0 - min(1.0, float(features.get("spectral_flatness", 0) / 0.4)),
         "prosody": float(features.get("prosody_variance", 0.5)),
-        "signal_quality": 1.0 - float(features.get("mfcc_variance", 40) / 100.0),
+        "signal_quality": min(1.0, max(0.0, float(features.get("mfcc_variance", 40)) / 200.0)),
     })
 
     cloning_probability = fake_probability
     emotion_mismatch = fake_probability > 50 and monotone_high(features)
     explanation = explain_short("audio", result, fake_probability)
+    if not has_librosa:
+        explanation += (" The audio file could not be fully decoded for spectral analysis "
+                        "(corrupt, truncated or unsupported format), so this verdict is not reliable.")
+    elif ai_origin == "ai_manipulated":
+        explanation += (" The audio appears to have been converted or edited using AI tools "
+                        "(spectral seams / splicing), raising the suspicion scale.")
+    elif ai_origin == "ai_generated":
+        explanation += " The voice shows hallmarks of being generated entirely by AI."
     recommendations = _recommendations(result, cloning_probability)
 
     elapsed = int((time.time() - start) * 1000)
@@ -118,6 +140,10 @@ def analyze_audio(file_path, filename, size_bytes):
         "filename": filename,
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
+        "suspicious_scale": susp,
+        "ai_origin": ai_origin,
+        "ai_generated": ai_origin == "ai_generated",
+        "ai_manipulated": ai_origin == "ai_manipulated",
         "fake_probability": round(fake_probability, 1),
         "cloning_probability": round(cloning_probability, 1),
         "emotion_mismatch": bool(emotion_mismatch),

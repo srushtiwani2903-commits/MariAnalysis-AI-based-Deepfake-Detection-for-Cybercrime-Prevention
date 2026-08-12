@@ -9,8 +9,9 @@ import hashlib
 import os
 import time
 
-from services.ensemble import (build_models, explain_short, reasons_from_features,
-                               risk_label, trust_score)
+from services.ensemble import (build_models, classify_ai_origin, explain_short,
+                               reasons_from_features, risk_label, suspicious_scale,
+                               trust_score)
 
 
 def _probe_video(file_path):
@@ -162,11 +163,18 @@ def analyze_video(file_path, filename, size_bytes):
     models, fake_probability = build_models("video", base * 100, filename, spread=4.5)
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
+    ai_origin = classify_ai_origin("video", features, fake_probability)
+    susp = suspicious_scale(fake_probability, ai_origin, features, "video")
     reasons = reasons_from_features("video", features, fake_probability)
     trust = trust_score(fake_probability, {
         "face": face_ratio, "noise": 1.0 - flicker, "compression": 1.0 - compression,
     })
     explanation = explain_short("video", result, fake_probability)
+    if ai_origin == "ai_manipulated":
+        explanation += (" The video appears to have been converted or edited using AI tools "
+                        "(temporal flicker / face inconsistencies), raising the suspicion scale.")
+    elif ai_origin == "ai_generated":
+        explanation += " The footage shows hallmarks of being generated entirely by AI."
     recommendations = _recommendations(result)
 
     # Per-frame timeline with a verdict for each sampled second.
@@ -198,6 +206,10 @@ def analyze_video(file_path, filename, size_bytes):
         "filename": filename,
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
+        "suspicious_scale": susp,
+        "ai_origin": ai_origin,
+        "ai_generated": ai_origin == "ai_generated",
+        "ai_manipulated": ai_origin == "ai_manipulated",
         "fake_probability": round(fake_probability, 1),
         "trust_score": trust,
         "risk_level": risk,
