@@ -15,7 +15,7 @@ export default function Footer() {
             <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center text-white">
               <ShieldCheckIcon className="w-4 h-4" />
             </span>
-            <span className="font-bold">Mari<span className="neon-text">Analysis</span></span>
+            <span className="font-bold whitespace-nowrap">Mari<span className="neon-text">Analysis</span></span>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Helps you check images, videos, audio and text for signs of being

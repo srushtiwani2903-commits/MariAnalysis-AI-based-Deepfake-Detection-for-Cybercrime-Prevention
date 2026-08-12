@@ -62,6 +62,8 @@ const workflow = [
   { icon: ShieldCheckIcon, title: "Report", desc: "Downloadable PDF/CSV report with QR verification, stored in history." },
 ];
 
+const smoothEase = [0.22, 1, 0.36, 1];
+
 export default function Home() {
   const { isAuthenticated } = useAuth();
   const { dark } = useTheme();
@@ -78,6 +80,7 @@ export default function Home() {
             <motion.span
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: smoothEase }}
               className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass text-xs font-medium mb-6"
             >
               <SparklesIcon className="w-4 h-4 text-neon-blue" />
@@ -87,7 +90,7 @@ export default function Home() {
             <motion.h1
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
+              transition={{ delay: 0.1, duration: 0.6, ease: smoothEase }}
               className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight"
             >
               Detect <span className="neon-text">Deepfakes</span> Before They
@@ -97,7 +100,7 @@ export default function Home() {
             <motion.p
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.2, duration: 0.6, ease: smoothEase }}
               className="mt-6 text-lg text-slate-600 dark:text-slate-300"
             >
               MariAnalysis checks images, videos, audio and text for signs of
@@ -108,7 +111,7 @@ export default function Home() {
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.3, duration: 0.6, ease: smoothEase }}
               className="mt-8 flex flex-wrap gap-4"
             >
               <Link to={isAuthenticated ? "/detect/image" : "/register"} className="btn-primary !px-8 !py-3.5 !text-base">
@@ -123,7 +126,7 @@ export default function Home() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.5, duration: 0.6, ease: smoothEase }}
               className="mt-6 font-mono text-xs text-slate-400 dark:text-slate-500 terminal-cursor"
             >
               . marianalysis scan --media image --model ensemble --explain yes
@@ -134,7 +137,7 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.25 }}
+            transition={{ delay: 0.25, duration: 0.6, ease: smoothEase }}
             className="relative"
           >
             <div className="glass-strong rounded-3xl p-6 relative">
@@ -202,7 +205,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
+              transition={{ delay: i * 0.1, duration: 0.6, ease: smoothEase }}
               className="text-center"
             >
               <p className="text-3xl sm:text-4xl font-extrabold neon-text">{s.value}</p>
@@ -232,8 +235,8 @@ export default function Home() {
                 initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                whileHover={{ y: -6 }}
+                transition={{ delay: i * 0.1, duration: 0.6, ease: smoothEase }}
+                whileHover={{ y: -6, transition: { duration: 0.3, ease: smoothEase } }}
                 className="glass rounded-2xl p-6 group relative overflow-hidden"
               >
                 <div className="scan-overlay opacity-0 group-hover:opacity-100" />
@@ -267,7 +270,7 @@ export default function Home() {
                 initial={{ opacity: 0, x: -20 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
+                transition={{ delay: i * 0.1, duration: 0.6, ease: smoothEase }}
                 className="relative glass rounded-2xl p-6"
               >
                 <span className="absolute top-4 right-5 font-mono text-3xl font-black text-slate-200 dark:text-white/5">
@@ -286,6 +289,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            transition={{ duration: 0.6, ease: smoothEase }}
             className="mt-12 text-center"
           >
             <Link to={isAuthenticated ? "/dashboard" : "/register"} className="btn-primary !px-10 !py-4 !text-lg">

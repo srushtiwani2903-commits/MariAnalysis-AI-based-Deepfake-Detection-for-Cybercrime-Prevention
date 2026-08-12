@@ -41,6 +41,8 @@ const pageVariants = {
   exit: { opacity: 0, y: -10 },
 };
 
+const smoothEase = [0.22, 1, 0.36, 1];
+
 function AnimatedRoutes() {
   const location = useLocation();
   return (
@@ -51,7 +53,7 @@ function AnimatedRoutes() {
         initial="initial"
         animate="animate"
         exit="exit"
-        transition={{ duration: 0.3, ease: "easeOut" }}
+        transition={{ duration: 0.45, ease: smoothEase }}
         className="min-h-screen"
       >
         <Routes location={location}>

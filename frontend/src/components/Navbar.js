@@ -56,7 +56,7 @@ export default function Navbar() {
           <span className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-neon-blue to-neon-purple text-white">
             <ShieldExclamationIcon className="w-5 h-5" />
           </span>
-          <span className="font-bold text-lg tracking-tight">
+          <span className="font-bold text-lg tracking-tight whitespace-nowrap">
             Mari<span className="neon-text">Analysis</span>
           </span>
         </Link>
