@@ -52,9 +52,16 @@ class Config:
     ALLOWED_AUDIO = {"mp3", "wav", "ogg", "flac", "m4a"}
 
     # --- AI Engine ---
-    # Heuristic-only: no model weights are used, predictions come from the
-    # explainable heuristic engines in services/. Flag kept for API compat.
+    # Heuristics run by default with no model weights. Set MODEL_ENABLED=true
+    # and drop a checkpoint trained by ml/train_cnn_kaggle.py into models/ to
+    # blend a real PyTorch CNN into every image verdict.
     MODEL_ENABLED = os.environ.get("MODEL_ENABLED", "false").lower() == "true"
+    MODEL_DIR = os.path.join(BASE_DIR, "models")
+    IMAGE_CNN_PATH = os.environ.get(
+        "IMAGE_CNN_PATH", os.path.join(MODEL_DIR, "faces_real_vs_fake_cnn.pt"))
+    # How much of the final image base score comes from the trained CNN
+    # (0..1; the rest stays with the explainable heuristic engines).
+    IMAGE_CNN_WEIGHT = float(os.environ.get("IMAGE_CNN_WEIGHT", "0.45"))
 
     # Kaggle credentials come from KAGGLE_USERNAME + KAGGLE_KEY (or
     # KAGGLE_JSON_PATH). Datasets are pulled into a temp cache that is
@@ -132,5 +139,5 @@ class Config:
 
 
 # Folder setup (run once at import time)
-for folder in (Config.UPLOAD_FOLDER, Config.REPORT_FOLDER, Config.HEATMAP_FOLDER):
+for folder in (Config.UPLOAD_FOLDER, Config.REPORT_FOLDER, Config.HEATMAP_FOLDER, Config.MODEL_DIR):
     os.makedirs(folder, exist_ok=True)

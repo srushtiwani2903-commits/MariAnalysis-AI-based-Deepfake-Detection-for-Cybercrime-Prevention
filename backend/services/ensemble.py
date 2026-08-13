@@ -58,12 +58,22 @@ def _interpret(prob):
     return "authentic", "low"
 
 
-def build_models(media_type, fake_probability, filename, spread=4.0):
-    """Deterministic per-model verdicts around the ensemble base score."""
+def build_models(media_type, fake_probability, filename, spread=4.0, real_scores=None):
+    """Per-model verdicts around the ensemble base score.
+
+    ``real_scores`` (optional dict of model name -> 0..100) lets a genuinely
+    trained model (e.g. the image CNN) contribute its own score instead of the
+    deterministic per-file delta.
+    """
+    real_scores = real_scores or {}
     models = []
     for spec in DEFAULT_MODEL_SETS.get(media_type, DEFAULT_MODEL_SETS["image"]):
-        delta = (_seed(spec["name"], filename) - 0.5) * 2 * spread
-        score = max(0.0, min(100.0, fake_probability + delta))
+        real = real_scores.get(spec["name"])
+        if real is not None:
+            score = max(0.0, min(100.0, float(real)))
+        else:
+            delta = (_seed(spec["name"], filename) - 0.5) * 2 * spread
+            score = max(0.0, min(100.0, fake_probability + delta))
         models.append({
             "name": spec["name"],
             "weight": spec["weight"],

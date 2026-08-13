@@ -6,8 +6,10 @@ explanation of *why* the verdict was reached, and a downloadable PDF/CSV report.
 There's also a learning center for getting familiar with deepfake threats.
 
 > **Works right away using deterministic heuristic engines** (no model weights
-> needed). Model training code was removed; the Kaggle subsystem only fetches
-> datasets on demand into a temp cache and never persists them in the project.
+> needed). Optionally, a PyTorch CNN trained on Kaggle GPUs
+> (`backend/ml/train_cnn_kaggle.py`) can be blended into image verdicts; the
+> Kaggle subsystem fetches datasets on demand into a temp cache and never
+> persists them in the project.
 
 ---
 
@@ -17,7 +19,7 @@ There's also a learning center for getting familiar with deepfake threats.
 - **Authentication** — register, login, forgot password, JWT, PBKDF2 password hashing, email validation
 - **Dashboard** — total scans, fake/real counts, accuracy, recent uploads, quick actions
 - **4 Detection modules**
-  - Image — Error Level Analysis + CNN/ViT hooks + metadata forensics + heatmap data
+  - Image — Error Level Analysis + trained CNN (EfficientNet transfer learning) + metadata forensics + heatmap data
   - Video — frame extraction, MediaPipe/Haar face detection, temporal analysis, timeline
   - Audio — Librosa spectrogram, spectral flatness, MFCC variance, voice-clone checks
   - Text — perplexity, burstiness, repetition + suspicious sentence highlighting
@@ -25,7 +27,9 @@ There's also a learning center for getting familiar with deepfake threats.
   (`POST /api/detect/url`), no manual download needed
 - **Automated Kaggle data pipeline** — deepfake datasets are fetched **directly from
   Kaggle on-demand**, extracted to a temp cache, used, then the temp cache is
-  auto-deleted. Nothing is stored in the project. No model training is performed.
+  auto-deleted. Nothing is stored in the project. Model training runs as a Kaggle
+  notebook (`backend/ml/train_cnn_kaggle.py`); the trained weights are the only
+  artifact copied back into `backend/models/`.
 - **Results page** — Authentic/Fake badge, confidence meter, risk level, XAI explanation, feature importances, recommendations, PDF/CSV/QR downloads
 - **Multi-model ensemble** — per-model verdict table (CNN / Transformer / CLIP / Audio / N-gram) plus a 0-100 evidence trust score on every result
 - **Explainable AI checklist** — pass/fail detection reasons (metadata, ELA, compression, noise, face consistency, network age…) shown on results and in the PDF
@@ -75,9 +79,11 @@ deepfake-detection/
 │   ├── requirements-ai.txt       # Optional AI/model dependencies
 │   ├── smoke_test.py             # End-to-end API test (39 checks)
 │   ├── .env.example              # Environment variables template
-│   ├── ml/                       # Kaggle data subsystem (no model training)
+│   ├── ml/                       # Kaggle data subsystem + CNN training
 │   │   ├── data_config.py        # Dataset registry (Kaggle slugs per media type)
 │   │   ├── kaggle_pipeline.py    # On-demand Kaggle fetch (temp cache, auto-clean)
+│   │   ├── train_cnn_kaggle.py   # Kaggle notebook: real-vs-fake CNN training
+│   ├── models/                   # Trained weights (gitignored, .gitkeep only)
 │   ├── routes/
 │   │   ├── auth.py               # /api/auth/*        (register, login, profile)
 │   │   ├── detection.py          # /api/detect/*      (image, video, audio, text, email, social, realtime, url)
@@ -91,6 +97,7 @@ deepfake-detection/
 │   ├── services/
 │   │   ├── ai_service.py         # Orchestrator (heuristic engines + ensemble)
 │   │   ├── ensemble.py           # Multi-model verdicts, trust score, XAI reasons
+│   │   ├── cnn_detector.py       # Optional trained-CNN inference (lazy load)
 │   │   ├── blockchain.py         # SHA-256 evidence ledger + verification
 │   │   ├── analyze_image.py      # ELA + metadata heuristics + heatmap
 │   │   ├── analyze_video.py      # frame + face + temporal heuristics
@@ -247,9 +254,9 @@ Interactive API docs are also rendered in the app at `/docs`.
 ## 🧠 Deepfake Analysis & the Kaggle Data Pipeline
 
 The app ships with deterministic heuristic engines so the full pipeline works
-out of the box with zero model weights. Model *training* was intentionally
-removed — the Kaggle subsystem is used only to fetch/extract/use datasets
-on-demand for research and validation.
+out of the box with zero model weights. An optional trained CNN upgrades the
+image module: train it on Kaggle GPUs, copy the checkpoint into
+`backend/models/`, and set `MODEL_ENABLED=true`.
 
 ### 1) Configure Kaggle credentials (once)
 
@@ -305,7 +312,30 @@ reported in every result as `kaggle_reference` / `kaggle_reference_status`.
 
 Add your own via `KAGGLE_EXTRA_DATASETS=user/dataset1,user/dataset2` in `.env`.
 
-### How the heuristic engines work (no model weights needed)
+### Optional trained CNN for images (accuracy boost)
+
+Train the real-vs-fake face detector on Kaggle with `backend/ml/train_cnn_kaggle.py`
+(EfficientNet transfer learning, mixed precision, early stopping):
+
+```bash
+# 1) Upload ml/train_cnn_kaggle.py to Kaggle -> GPU (T4x2) -> Run all.
+# 2) Download marianalysis_cnn.pt from the notebook Output tab.
+# 3) Copy it into the project:
+cp marianalysis_cnn.pt backend/models/faces_real_vs_fake_cnn.pt   # macOS/Linux
+copy marianalysis_cnn.pt backend\models\faces_real_vs_fake_cnn.pt # Windows
+
+# 4) Enable it:
+#    backend/.env  ->  MODEL_ENABLED=true
+```
+
+When enabled, `backend/services/cnn_detector.py` loads the checkpoint once
+(thread-safe) and every image scan blends the CNN's fake probability
+(`IMAGE_CNN_WEIGHT`, default 0.45) with the heuristic engines. The ensemble's
+"CNN (EfficientNet)" slot votes with the real network output, and results carry
+a `cnn_model` payload (fake probability, confidence, per-class probabilities,
+latency). Without the weights the app degrades silently to heuristics-only.
+
+### How the heuristic engines work
 
 - **Image**: Error Level Analysis (recompression artifacts), pHash-based
   similarity, color/texture statistics, EXIF forensics.
@@ -315,6 +345,10 @@ Add your own via `KAGGLE_EXTRA_DATASETS=user/dataset1,user/dataset2` in `.env`.
   RIFF header fallback.
 - **Text**: n-gram perplexity proxy, sentence-length burstiness, repetition
   ratio.
+
+The heuristics are CPU-only — no GPU or model hosting required. The optional
+CNN runs in <100ms on CPU per image (EfficientNet-B0 @ 224px), so it stays
+lightweight even without a GPU.
 
 ---
 

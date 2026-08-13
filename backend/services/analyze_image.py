@@ -259,12 +259,39 @@ def analyze_image(file_path, filename, size_bytes):
     except Exception:  # noqa: BLE001
         kaggle_info = None
 
-    models, fake_probability = build_models("image", base * 100, filename, spread=4.0)
+    # ------------------------- trained CNN signal -------------------------- #
+    # When a model has been trained (ml/train_cnn_kaggle.py) and deployed,
+    # blend its real fake-probability into the base and let the ensemble's
+    # "CNN" slot vote with the actual network output instead of a heuristic.
+    cnn_info = None
+    cnn_fake_pct = None
+    try:
+        from services.cnn_detector import cnn_detector
+        if cnn_detector.available():
+            cnn_info = cnn_detector.predict(file_path)
+            if cnn_info and cnn_info.get("fake_probability") is not None:
+                cnn_fake_pct = cnn_info["fake_probability"] * 100.0
+                base = max(0.0, min(1.0,
+                                    (1.0 - Config.IMAGE_CNN_WEIGHT) * base
+                                    + Config.IMAGE_CNN_WEIGHT * cnn_info["fake_probability"]))
+                features["cnn_ai_probability"] = round(cnn_info["fake_probability"], 4)
+    except Exception:  # noqa: BLE001
+        cnn_info = None
+
+    real_scores = {"CNN (EfficientNet)": cnn_fake_pct} if cnn_fake_pct is not None else None
+    models, fake_probability = build_models("image", base * 100, filename, spread=4.0,
+                                            real_scores=real_scores)
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
     ai_origin = classify_ai_origin("image", features, fake_probability)
     susp = suspicious_scale(fake_probability, ai_origin, features, "image")
     reasons = reasons_from_features("image", features, fake_probability)
+    if cnn_fake_pct is not None:
+        reasons.insert(0, {
+            "check": "Trained CNN (EfficientNet) forensic signal",
+            "passed": cnn_fake_pct < 50.0,
+            "detail": f"CNN fake probability {cnn_fake_pct:.1f}%",
+        })
     factors = {
         "metadata": 1.0 - meta_score,
         "ai_artifacts": 1.0 - ela_score,
@@ -305,9 +332,10 @@ def analyze_image(file_path, filename, size_bytes):
         "file_hash": file_hash,
         "face_analysis": face,
         "heatmap_file": heatmap_name,
-        "model": "heuristic-vision-v1",
+        "model": "efficientnet-cnn-v1" if cnn_fake_pct is not None else "heuristic-vision-v1",
         "heatmap_available": True,
         "kaggle_reference": kaggle_info,
+        "cnn_model": cnn_info,
         "verified": False,
     }
 

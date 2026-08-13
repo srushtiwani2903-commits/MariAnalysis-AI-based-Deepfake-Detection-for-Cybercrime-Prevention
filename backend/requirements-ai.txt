@@ -5,3 +5,7 @@ opencv-python>=4.12
 librosa>=0.10.2
 mediapipe>=1.0
 kaggle==2.2.4
+# PyTorch CNN inference (CPU build is fine for detection latency ~50ms/image).
+# Training happens on Kaggle GPUs via ml/train_cnn_kaggle.py - not here.
+torch>=2.1
+torchvision>=0.16
