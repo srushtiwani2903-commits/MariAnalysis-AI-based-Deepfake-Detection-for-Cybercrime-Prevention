@@ -32,7 +32,10 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # --- CORS ---
-    CORS(app, resources={r"/api/*": {"origins": Config.CORS_ORIGINS}}, supports_credentials=False)
+    # supports_credentials lets the cookie-based web session flow through when
+    # the API is called cross-origin; the dev frontend is same-origin via the
+    # CRA proxy so no CORS is even involved there.
+    CORS(app, resources={r"/api/*": {"origins": Config.CORS_ORIGINS}}, supports_credentials=True)
 
     # --- Security headers on every response ---
     @app.after_request

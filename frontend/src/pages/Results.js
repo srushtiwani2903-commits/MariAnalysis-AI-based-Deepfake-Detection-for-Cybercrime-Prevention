@@ -17,7 +17,7 @@ import DeepfakeTimeline from "../components/DeepfakeTimeline";
 import api from "../api/api";
 import { formatDate, riskColor, humanSize } from "../utils/format";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001/api";
+const API_URL = process.env.REACT_APP_API_URL || "/api";
 
 export default function Results() {
   const { scanId } = useParams();
@@ -71,10 +71,7 @@ export default function Results() {
 
   const download = (fmt) => {
     setDownloading(true);
-    const token = localStorage.getItem("deepguard-token");
-    fetch(`${API_URL}/reports/${scanId}/${fmt}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`${API_URL}/reports/${scanId}/${fmt}`, { credentials: "include" })
       .then((r) => r.blob())
       .then((blob) => {
         const url = URL.createObjectURL(blob);

@@ -1,20 +1,45 @@
-"""Application configuration. All values can be overridden with environment variables."""
+"""Application configuration.
+
+Secrets (SECRET_KEY, JWT_SECRET_KEY, ADMIN_PASSWORD, API keys, Kaggle/Gemini/
+MSG91/SMTP credentials) live in an encrypted vault file
+(security/secrets.vault) guarded by a master key, never in this file or .env
+in plaintext. Non-secret values can still be overridden with environment
+variables.
+"""
 import os
 from datetime import timedelta
 from dotenv import load_dotenv
 
+from security.vault import ensure_seeded, get_secret
+
 load_dotenv()
+
+# Make sure every secret exists in the encrypted vault before Config reads it.
+ensure_seeded()
 
 
 class Config:
     # --- Flask core ---
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
+    # Auto-generated and stored encrypted; never a hardcoded default.
+    SECRET_KEY = get_secret("SECRET_KEY") or os.urandom(32).hex()
     DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
 
     # --- JWT Authentication ---
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", SECRET_KEY)
+    JWT_SECRET_KEY = get_secret("JWT_SECRET_KEY") or SECRET_KEY
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=int(os.environ.get("JWT_EXPIRES_HOURS", 2)))
     JWT_ERROR_MESSAGE_KEY = "message"
+    # Web sessions ride in an HttpOnly, Secure, SameSite cookie so the token is
+    # never readable from JS/localStorage. The Authorization header stays
+    # enabled for API/curl clients.
+    JWT_TOKEN_LOCATION = ["cookies", "headers"]
+    JWT_COOKIE_SECURE = os.environ.get("JWT_COOKIE_SECURE", "true").lower() == "true"
+    JWT_COOKIE_HTTPONLY = True
+    JWT_COOKIE_SAMESITE = os.environ.get("JWT_COOKIE_SAMESITE", "Strict")
+    JWT_COOKIE_CSRF_PROTECT = True
+    JWT_CSRF_IN_COOKIES = True
+    JWT_ACCESS_COOKIE_NAME = "deepguard_session"
+    JWT_ACCESS_CSRF_COOKIE_NAME = "deepguard_csrf"
+    JWT_CSRF_HEADER_NAME = "X-CSRF-TOKEN"
     # Single active-session enforcement: after this many minutes without an
     # authenticated request the session is treated as stale and invalidated.
     # 0 disables the inactivity timeout (JWT expiry still applies).
@@ -63,11 +88,11 @@ class Config:
     # (0..1; the rest stays with the explainable heuristic engines).
     IMAGE_CNN_WEIGHT = float(os.environ.get("IMAGE_CNN_WEIGHT", "0.45"))
 
-    # Kaggle credentials come from KAGGLE_USERNAME + KAGGLE_KEY (or
-    # KAGGLE_JSON_PATH). Datasets are pulled into a temp cache that is
-    # auto-deleted after use - nothing is persisted, no training happens.
-    KAGGLE_USERNAME = os.environ.get("KAGGLE_USERNAME", "")
-    KAGGLE_KEY = os.environ.get("KAGGLE_KEY", "")
+    # Kaggle credentials live in the encrypted vault; only the (optional)
+    # pointer to a kaggle.json file stays in the environment. Datasets are
+    # pulled into a temp cache that is auto-deleted after use.
+    KAGGLE_USERNAME = get_secret("KAGGLE_USERNAME") or os.environ.get("KAGGLE_USERNAME", "")
+    KAGGLE_KEY = get_secret("KAGGLE_KEY") or os.environ.get("KAGGLE_KEY", "")
     KAGGLE_JSON_PATH = os.environ.get("KAGGLE_JSON_PATH", "")
     KAGGLE_AUTOSYNC = os.environ.get("KAGGLE_AUTOSYNC", "false").lower() == "true"
     KAGGLE_FORCE = os.environ.get("KAGGLE_FORCE", "false").lower() == "true"
@@ -86,9 +111,11 @@ class Config:
     RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", 60))
 
     # API keys are stored as a SHA-256 hash (for lookup) plus a Fernet-encrypted
-    # blob, so a leaked database still doesn't expose the keys. Set
-    # API_KEY_ENCRYPTION_SECRET in production; it defaults to SECRET_KEY.
-    API_KEY_ENCRYPTION_SECRET = os.environ.get("API_KEY_ENCRYPTION_SECRET", "") or SECRET_KEY
+    # blob, so a leaked database still doesn't expose the keys. The encryption
+    # secret itself lives in the vault.
+    API_KEY_ENCRYPTION_SECRET = (get_secret("API_KEY_ENCRYPTION_SECRET")
+                                 or os.environ.get("API_KEY_ENCRYPTION_SECRET", "")
+                                 or SECRET_KEY)
 
     # --- Intrusion Detection & Prevention (fail2ban-style) ---
     IDPS_ENABLED = os.environ.get("IDPS_ENABLED", "true").lower() == "true"
@@ -97,9 +124,11 @@ class Config:
     IDPS_BAN_SECONDS = int(os.environ.get("IDPS_BAN_SECONDS", 900))
 
     # --- Admin bootstrap ---
+    # The password comes from the encrypted vault (auto-generated if the
+    # ADMIN_PASSWORD env var was never provided on first boot).
     ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@marianalysis.local")
-    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Admin@12345")
+    ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD") or os.environ.get("ADMIN_PASSWORD", "")
 
     # --- E-mail (password reset links) ---
     # MAIL_ENABLED=false -> links are logged to security/logs/reset_links.log
@@ -108,7 +137,7 @@ class Config:
     SMTP_HOST = os.environ.get("SMTP_HOST", "")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
     SMTP_USER = os.environ.get("SMTP_USER", "")
-    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    SMTP_PASSWORD = get_secret("SMTP_PASSWORD") or os.environ.get("SMTP_PASSWORD", "")
     MAIL_FROM = os.environ.get("MAIL_FROM", "MariAnalysis <no-reply@marianalysis.local>")
     MAIL_STARTTLS = os.environ.get("MAIL_STARTTLS", "true").lower() == "true"
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
@@ -123,15 +152,15 @@ class Config:
     DEBUG_OTP = os.environ.get("DEBUG_OTP", "true").lower() == "true"
 
     # --- AI assistant (Gemini) ---
-    # Set GEMINI_API_KEY to power the /api/chat assistant with Google Gemini.
-    # Without a key the chatbot falls back to the built-in rule-based replies.
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    # GEMINI_API_KEY lives in the encrypted vault. Without a key the chatbot
+    # falls back to the built-in rule-based replies.
+    GEMINI_API_KEY = get_secret("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", 25))
     GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", 1024))
 
     # --- MSG91 SMS (India) ---
-    MSG91_AUTHKEY = os.environ.get("MSG91_AUTHKEY", "")
+    MSG91_AUTHKEY = get_secret("MSG91_AUTHKEY") or os.environ.get("MSG91_AUTHKEY", "")
     MSG91_SENDER_ID = os.environ.get("MSG91_SENDER_ID", "MARIIN")
     MSG91_TEMPLATE_ID = os.environ.get("MSG91_TEMPLATE_ID", "")
     MSG91_COUNTRY_CODE = os.environ.get("MSG91_COUNTRY_CODE", "91")

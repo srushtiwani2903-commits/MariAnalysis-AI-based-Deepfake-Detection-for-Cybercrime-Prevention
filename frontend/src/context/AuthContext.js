@@ -4,23 +4,17 @@ import api from "../api/api";
 
 const AuthContext = createContext({});
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001/api";
-
 // Message the login page shows after a single-session forced logout.
 const LOGOUT_MESSAGE = "You have been logged out because your account was signed in on another device.";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem("deepguard-token"));
   const [loading, setLoading] = useState(true);
   const streamRef = useRef(null);
   const navigate = useNavigate();
 
   const clearSession = () => {
     closeStream();
-    localStorage.removeItem("deepguard-token");
-    sessionStorage.removeItem("deepguard-401-message");
-    setToken(null);
     setUser(null);
   };
 
@@ -31,21 +25,29 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Restore the session on load: the JWT lives in an HttpOnly cookie, so the
+  // only way to know who we are is to ask the backend.
+  useEffect(() => {
+    api
+      .get("/auth/me")
+      .then((res) => setUser(res.data.user))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
+
   // Single-session enforcement on the frontend:
-  // 1) Every 401 from the backend clears local auth state and redirects.
+  // Every 401 from the backend clears local auth state and redirects.
   useEffect(() => {
     const onUnauthorized = (e) => {
       const msg = e?.detail?.message;
       const wasForced = msg && msg.includes("another device");
       closeStream();
-      localStorage.removeItem("deepguard-token");
       if (wasForced) {
         // Remember the reason so the login page can display it after redirect.
         sessionStorage.setItem("deepguard-401-message", LOGOUT_MESSAGE);
       } else {
         sessionStorage.removeItem("deepguard-401-message");
       }
-      setToken(null);
       setUser(null);
       if (window.location.pathname !== "/login") {
         navigate("/login", { replace: true });
@@ -55,19 +57,19 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("deepguard:unauthorized", onUnauthorized);
   }, [navigate]);
 
-  // 2) Real-time logout: subscribe to the backend SSE stream with the JWT in
-  //    an Authorization header (never in the URL). When this account logs in
+  // 2) Real-time logout: subscribe to the backend SSE stream (auth via the
+  //    HttpOnly cookie, never in a header/URL). When this account logs in
   //    elsewhere, the server deactivates this session and pushes the event.
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
     const controller = new AbortController();
     streamRef.current = controller;
     const started = new Date();
 
     const connect = async () => {
       try {
-        const res = await fetch(`${API_URL}/auth/events`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await fetch("/api/auth/events", {
+          credentials: "include",
           signal: controller.signal,
         });
         if (!res.ok || !res.body) throw new Error("SSE failed");
@@ -85,8 +87,6 @@ export function AuthProvider({ children }) {
             if (chunk.includes("event: session_revoked")) {
               sessionStorage.setItem("deepguard-401-message", LOGOUT_MESSAGE);
               closeStream();
-              localStorage.removeItem("deepguard-token");
-              setToken(null);
               setUser(null);
               if (window.location.pathname !== "/login") {
                 navigate("/login", { replace: true });
@@ -105,47 +105,27 @@ export function AuthProvider({ children }) {
 
     connect();
     return () => controller.abort();
-  }, [token, navigate]);
-
-  useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    api
-      .get("/auth/me")
-      .then((res) => setUser(res.data.user))
-      .catch(() => clearSession())
-      .finally(() => setLoading(false));
-  }, [token]);
-
-  const saveSession = (token, user) => {
-    sessionStorage.removeItem("deepguard-401-message");
-    localStorage.setItem("deepguard-token", token);
-    setToken(token);
-    setUser(user);
-  };
+  }, [user, navigate]);
 
   const login = async (identifier, password) => {
     // Close this tab's stream first so re-login here doesn't kick itself.
     closeStream();
     const { data } = await api.post("/auth/login", { identifier, password });
-    saveSession(data.token, data.user);
+    setUser(data.user);
     return data;
   };
 
   const register = async (payload) => {
     closeStream();
     const { data } = await api.post("/auth/register", payload);
-    if (data.token) {
-      saveSession(data.token, data.user);
-    }
+    setUser(data.user);
     return data;
   };
 
   const logout = () => {
     api.post("/auth/logout").catch(() => {});
-    clearSession();
+    closeStream();
+    setUser(null);
   };
 
   const refreshUser = async () => {
@@ -156,7 +136,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout, refreshUser, isAuthenticated: !!token }}
+      value={{ user, loading, login, register, logout, refreshUser, isAuthenticated: !!user }}
     >
       {children}
     </AuthContext.Provider>

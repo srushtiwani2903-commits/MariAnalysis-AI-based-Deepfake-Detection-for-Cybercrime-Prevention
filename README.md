@@ -168,7 +168,14 @@ python run.py                            # starts on http://localhost:5001
 ```
 
 The first run auto-creates the SQLite database and a default admin account
-(configured in `.env`, default `admin@marianalysis.local` / `Admin@12345`).
+(`admin@marianalysis.local` / the password you set). Since 2026-08 the
+backend keeps every secret — `SECRET_KEY`, `JWT_SECRET_KEY`, `ADMIN_PASSWORD`,
+Kaggle/Gemini/MSG91/SMTP credentials — in an **encrypted vault** at
+`backend/security/secrets.vault` (Fernet + SHA-256, guarded by
+`backend/security/master.key`, both gitignored). On first boot the vault
+auto-seeds itself and migrates any values already present in `.env`; a missing
+`ADMIN_PASSWORD` is generated and written to
+`backend/security/ADMIN_CREDENTIALS.txt` once.
 
 ### 2) Frontend
 
@@ -199,13 +206,15 @@ powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
 
 ## 🔌 API Endpoints (summary)
 
-Base URL: `http://localhost:5001/api` — all protected endpoints require
-`Authorization: Bearer <token>`.
+Base URL: `http://localhost:5001/api`. The **web app** authenticates with an
+HttpOnly, Secure, SameSite=Strict session cookie (never readable from JS or
+localStorage). API/script clients get the JWT in the JSON response body and
+send `Authorization: Bearer <token>`.
 
 | Method | Endpoint                       | Description                          |
 |--------|--------------------------------|--------------------------------------|
-| POST   | `/auth/register`               | Create account (returns JWT)         |
-| POST   | `/auth/login`                  | Login (returns JWT)                  |
+| POST   | `/auth/register`               | Create account (sets session cookie) |
+| POST   | `/auth/login`                  | Login (sets session cookie)          |
 | POST   | `/auth/forgot-password`        | Request password reset               |
 | POST   | `/auth/reset-password`         | Set new password                     |
 | GET    | `/auth/me`                     | Current user profile                 |
@@ -371,7 +380,14 @@ requirements.txt).
 ## 🔒 Security Model
 
 - **Passwords**: PBKDF2 via `werkzeug.security` — never stored in plain text.
-- **Auth**: short-lived JWT access tokens (no cookies ⇒ no CSRF surface).
+- **Secrets**: `SECRET_KEY`, `JWT_SECRET_KEY`, `ADMIN_PASSWORD` and third-party
+  API keys live in an encrypted vault (`security/secrets.vault`, Fernet + SHA-256)
+  — never in source control or plaintext `.env`; the master key is gitignored.
+- **Auth**: short-lived JWT access tokens in an **HttpOnly, Secure,
+  SameSite=Strict cookie** — JavaScript can never read the token, so XSS can't
+  steal sessions. The token is not returned to the browser in JSON responses.
+  State-changing cookie-authenticated requests require a double-submit CSRF
+  token (`X-CSRF-TOKEN`), so cross-site requests cannot drive the API.
 - **IDPS (Intrusion Detection & Prevention)**: fail2ban-style per-IP lockout —
   5 failed logins in a window auto-bans the IP; bans + every data
   create/update/delete are written to the DB `logs` table **and** append-only
@@ -422,8 +438,10 @@ pip install -r requirements.txt
 gunicorn -w 4 -b 0.0.0.0:$PORT app:app
 ```
 
-Set env vars: `SECRET_KEY`, `JWT_SECRET_KEY`, `DATABASE_URL`,
-`CORS_ORIGINS=https://<frontend>.vercel.app`.
+Set env vars: `DATABASE_URL`, `CORS_ORIGINS=https://<frontend>.vercel.app`,
+and the vault master key `SECRETS_MASTER_KEY` (the vault file
+`backend/security/secrets.vault` must be copied to the host; it is gitignored).
+Set `JWT_COOKIE_SECURE=true` (HTTPS required for the cookie to be sent).
 
 ### Database hosting
 
