@@ -13,7 +13,7 @@ const GB = 1024;
 const MEDIA = [
   {
     key: "image", title: "Image", desc: "PNG, JPG, WebP, BMP, TIFF",
-    icon: PhotoIcon, color: "from-neon-blue to-cyan-400",
+    icon: PhotoIcon, color: "accent-imgscan-dark from-neon-blue to-neon-cyan",
     accept: ".png,.jpg,.jpeg,.webp,.bmp,.tiff", maxMB: 1 * GB,
     loader: "Running error-level analysis, texture stats and metadata forensics…",
     engine: "Kaggle reference: real-and-fake-face-detection",

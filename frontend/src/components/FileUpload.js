@@ -85,10 +85,10 @@ export default function FileUpload({
         onDrop={onDrop}
         onClick={() => !uploading && inputRef.current?.click()}
         whileHover={{ scale: 1.005 }}
-        animate={drag ? { scale: 1.02, borderColor: "#22d3ee" } : { borderColor: "rgba(34,211,238,0.4)" }}
+        animate={drag ? { scale: 1.02 } : { scale: 1 }}
         className={`relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center
           transition-colors duration-300 bg-white/40 dark:bg-white/[0.03] ${
-            drag ? "border-neon-blue bg-neon-blue/5" : ""
+            drag ? "border-neon-blue bg-neon-blue/5" : "border-neon-blue/40"
           }`}
       >
         <div className="scan-overlay" />

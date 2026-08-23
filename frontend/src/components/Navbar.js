@@ -53,7 +53,7 @@ export default function Navbar() {
       <nav className="container-app flex items-center justify-between h-16">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 group">
-          <span className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-neon-blue to-neon-purple text-white">
+          <span className="accent-solid-green relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-neon-blue to-neon-purple text-white">
             <ShieldExclamationIcon className="w-5 h-5" />
           </span>
           <span className="font-bold text-lg tracking-tight whitespace-nowrap">
@@ -96,7 +96,7 @@ export default function Navbar() {
                 onClick={() => setUserMenu(!userMenu)}
                 className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-white/10 transition-colors"
               >
-                <span className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center text-white text-sm font-bold uppercase">
+                <span className="accent-solid-green w-8 h-8 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center text-white text-sm font-bold uppercase">
                   {user?.username?.[0] || "U"}
                 </span>
                 <span className="hidden xl:block text-sm font-medium">{user?.username}</span>

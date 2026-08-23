@@ -12,8 +12,10 @@ module.exports = {
           700: "#1a2150",
         },
         neon: {
-          blue: "#22d3ee",
-          cyan: "#00e5ff",
+          // Accent follows the theme: neon blue/cyan in dark mode,
+          // cyber dark-green in light mode (see --accent vars in index.css).
+          blue: "rgb(var(--accent) / <alpha-value>)",
+          cyan: "rgb(var(--accent-2) / <alpha-value>)",
           purple: "#7c3aed",
           pink: "#e879f9",
         },

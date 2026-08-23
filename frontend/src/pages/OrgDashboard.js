@@ -70,7 +70,7 @@ export default function OrgDashboard() {
       {data && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <StatCard icon={ArrowUpTrayIcon} label="Scans Today" value={data.today_uploads} color="from-neon-blue to-cyan-400" delay={0} />
+            <StatCard icon={ArrowUpTrayIcon} label="Scans Today" value={data.today_uploads} color="from-neon-blue to-neon-cyan" delay={0} />
             <StatCard icon={ExclamationTriangleIcon} label="Deepfakes Detected" value={data.fake_detected} color="from-rose-500 to-pink-500" delay={0.05} />
             <StatCard icon={CheckCircleIcon} label="Authentic" value={data.real_detected} color="from-emerald-400 to-teal-500" delay={0.1} />
             <StatCard icon={ClockIcon} label="Pending Review" value={data.pending_review} color="from-amber-400 to-orange-500" delay={0.15} />

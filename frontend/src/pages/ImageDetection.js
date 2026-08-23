@@ -54,7 +54,7 @@ export default function ImageDetection() {
   return (
     <div className="container-app py-10 max-w-4xl">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-        <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-blue to-cyan-400 text-white mb-4">
+        <span className="accent-imgscan-dark inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-blue to-neon-cyan text-white mb-4">
           <PhotoIcon className="w-8 h-8" />
         </span>
         <h1 className="text-3xl font-bold">Image Deepfake Detection</h1>

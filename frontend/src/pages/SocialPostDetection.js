@@ -41,7 +41,7 @@ export default function SocialPostDetection() {
   return (
     <div className="container-app py-10 max-w-4xl">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-        <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-cyan-400 to-neon-blue text-white mb-4">
+        <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-cyan to-neon-blue text-white mb-4">
           <ShareIcon className="w-8 h-8" />
         </span>
         <h1 className="text-3xl font-bold">Social Post Detection</h1>

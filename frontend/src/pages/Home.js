@@ -31,7 +31,7 @@ const features = [
     icon: PhotoIcon,
     title: "Image Deepfake Detection",
     desc: "CNN + Vision Transformer analysis with Error Level Analysis, metadata forensics and heatmap visualization to spot manipulated faces and edited pixels.",
-    color: "from-neon-blue to-cyan-400",
+    color: "accent-imgscan-dark from-neon-blue to-neon-cyan",
   },
   {
     icon: FilmIcon,
