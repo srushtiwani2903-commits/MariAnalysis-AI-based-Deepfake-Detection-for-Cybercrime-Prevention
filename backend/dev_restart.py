@@ -1,10 +1,9 @@
-"""Dev auto-restart watcher for the backend (Windows-friendly).
+"""Watches backend sources + .env and restarts run.py on any change.
 
-Watches backend source files + .env and restarts run.py on any change,
-replacing Flask's reloader so a single clean process runs and the SQLite DB
-is never left locked by an orphan reloader parent.
+On Windows this replaces Flask's own reloader so a single clean process runs
+and the SQLite DB never gets locked by an orphan reloader parent.
 
-Usage: python dev_restart.py   (keep running)
+Usage: python dev_restart.py  (keep running)
 """
 import os
 import socket
@@ -59,25 +58,24 @@ def start_server():
         stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
     )
-    if port_free(5000):
+    if port_free(5001):
         log(f"backend up (pid {proc.pid})")
     else:
-        log(f"backend pid {proc.pid} started but port 5000 did not open")
+        log(f"backend pid {proc.pid} started but port 5001 did not open")
     return proc
 
 
 def stop_server(proc):
     if proc and proc.poll() is None:
-        # taskkill /T kills the whole tree - the venv python.exe is a shim
-        # that spawns the real (Windows Store) python, so proc.kill() alone
-        # would leave the child running and keep the DB/port locked.
+        # taskkill /T kills the whole tree: the venv python.exe is a shim that
+        # spawns the real python, so proc.kill() alone would leak the child.
         subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                        capture_output=True)
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             log("could not stop backend cleanly")
-    port_free(5000)
+    port_free(5001)
 
 
 def main():

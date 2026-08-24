@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldExclamationIcon, DocumentArrowDownIcon,
@@ -8,10 +9,8 @@ import {
 import api from "../api/api";
 import { formatDate } from "../utils/format";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
-
-// Evidence & cybercrime reporting portal. Detected deepfakes are anchored to a
-// blockchain-style ledger with a case ID for law-enforcement follow-up.
+// Evidence reporting: flagged deepfakes get a case ID on a blockchain-style
+// ledger you can share with platforms or authorities.
 export default function Evidence() {
   const [cases, setCases] = useState([]);
   const [scans, setScans] = useState([]);
@@ -234,10 +233,9 @@ export default function Evidence() {
               </div>
               <div className="mt-5 flex gap-3">
                 {detail.block && (
-                  <a className="btn-secondary flex-1 justify-center text-xs"
-                    href={`${API_URL}/evidence/verify/${detail.scan_id}`} target="_blank" rel="noreferrer">
+                  <Link to={`/verify/scan/${detail.scan_id}`} className="btn-secondary flex-1 justify-center text-xs">
                     Re-verify
-                  </a>
+                  </Link>
                 )}
                 <button onClick={() => setDetail(null)} className="btn-primary flex-1 justify-center text-xs">Close</button>
               </div>

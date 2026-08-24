@@ -1,12 +1,9 @@
-"""Shared multi-model ensemble + trust-score + XAI reason builders.
+"""Shared ensemble, trust score and XAI reason builders.
 
-Every analyzer computes a base `fake_probability` from its deterministic
-heuristic features, then this module:
-  - splits it into several named "models" (CNN / ViT / DeepFace / …) with tiny
-    deterministic per-model deltas, so a per-file ensemble is stable,
-  - derives the final verdict by a weighted vote,
-  - computes a 0-100 evidence trust score,
-  - attaches the reason checklist used by the Explainable-AI panel.
+Splits each analyzer's base fake_probability into several named "models"
+(CNN / ViT / DeepFace / ...) with deterministic per-file deltas, votes them
+into a verdict, computes a 0-100 trust score, and builds the reason checklist
+the Explainable-AI panel shows.
 """
 import hashlib
 
@@ -61,19 +58,29 @@ def _interpret(prob):
     return "authentic", "low"
 
 
-def build_models(media_type, fake_probability, filename, spread=4.0):
-    """Deterministic per-model verdicts around the ensemble base score."""
+def build_models(media_type, fake_probability, filename, spread=4.0, real_scores=None):
+    """Per-model verdicts around the ensemble base score.
+
+    ``real_scores`` (optional dict of model name -> 0..100) lets a genuinely
+    trained model (e.g. the image CNN) contribute its own score instead of the
+    deterministic per-file delta.
+    """
+    real_scores = real_scores or {}
     models = []
     for spec in DEFAULT_MODEL_SETS.get(media_type, DEFAULT_MODEL_SETS["image"]):
-        delta = (_seed(spec["name"], filename) - 0.5) * 2 * spread
-        score = max(0.0, min(100.0, fake_probability + delta))
+        real = real_scores.get(spec["name"])
+        if real is not None:
+            score = max(0.0, min(100.0, float(real)))
+        else:
+            delta = (_seed(spec["name"], filename) - 0.5) * 2 * spread
+            score = max(0.0, min(100.0, fake_probability + delta))
         models.append({
             "name": spec["name"],
             "weight": spec["weight"],
             "prediction": _interpret(score)[0],
             "fake_probability": round(score, 1),
         })
-    # Weighted vote determines the final verdict (overrides base when split).
+    # The weighted vote is the final verdict (overrides the base score).
     final_prob = sum(m["fake_probability"] * m["weight"] for m in models)
     return models, round(final_prob, 1)
 
@@ -114,6 +121,86 @@ def trust_score(fake_probability, factors=None):
     return round(max(0.0, min(100.0, trust)), 1)
 
 
+def classify_ai_origin(media_type, features, fake_probability):
+    """Classify the origin of a flagged file.
+
+    Returns one of: ``authentic``, ``ai_generated`` (created entirely by AI)
+    or ``ai_manipulated`` (authentic media converted/edited with AI tools).
+    """
+    if fake_probability < 62:
+        return "authentic"
+
+    if media_type == "image":
+        # Fully synthetic: overly smooth textures, too-clean recompression,
+        # near-zero ELA error and low entropy.
+        synthetic = (
+            features.get("texture_uniformity", 0) >= 0.75
+            and features.get("recompression_similarity", 0) >= 0.8
+            and features.get("error_level_analysis", 1) <= 0.06
+            and features.get("histogram_entropy", 8) <= 7.0
+        )
+        # AI-tool conversion (face-swap / inpainting / enhancement) shows up as
+        # localised ELA hotspots spread across the frame.
+        manipulated = features.get("ela_local_variance", 0) >= 0.35
+        if synthetic:
+            return "ai_generated"
+        if manipulated:
+            return "ai_manipulated"
+        return "ai_generated" if features.get("error_level_analysis", 1) <= 0.03 else "ai_manipulated"
+
+    if media_type == "video":
+        # Generated video: a face is present in almost every sampled frame and
+        # sharpness barely varies (smooth synthetic faces).
+        smooth = (
+            features.get("face_presence", 0) >= 0.6
+            and features.get("temporal_flicker", 1) <= 0.35
+        )
+        # AI conversion (face-swap / frame splicing) spikes temporal flicker.
+        edited = features.get("temporal_flicker", 0) >= 0.5
+        if smooth:
+            return "ai_generated"
+        if edited:
+            return "ai_manipulated"
+        return "ai_generated" if features.get("byte_hash_drift", 0) >= 0.6 else "ai_manipulated"
+
+    if media_type == "audio":
+        # Cloned voice: unusually flat spectrum with over-smooth prosody.
+        synthetic = (
+            features.get("spectral_flatness", 0) >= 0.25
+            and features.get("prosody_variance", 1) <= 0.4
+        )
+        # AI-tool conversion / splicing of real audio shows spectral seams.
+        edited = features.get("spectral_flatness", 0) >= 0.3 and features.get("zero_crossing_rate", 1) >= 0.06
+        if synthetic:
+            return "ai_generated"
+        if edited:
+            return "ai_manipulated"
+        return "ai_manipulated"
+
+    return "ai_manipulated"
+
+
+def suspicious_scale(fake_probability, ai_origin, features, media_type):
+    """0-100 suspicion meter. Boosted when AI tools converted/edited media.
+
+    Converted media is more deceptive than a clearly synthetic file, so when
+    AI-tool manipulation is detected the scale is pushed higher.
+    """
+    scale = fake_probability
+    if ai_origin == "ai_manipulated":
+        if media_type == "image" and features.get("ela_local_variance", 0) >= 0.35:
+            scale += 12
+        elif media_type == "video" and features.get("temporal_flicker", 0) >= 0.5:
+            scale += 10
+        elif media_type == "audio" and features.get("spectral_flatness", 0) >= 0.3:
+            scale += 10
+        else:
+            scale += 8
+    elif ai_origin == "ai_generated":
+        scale += 4
+    return round(max(0.0, min(100.0, scale)), 1)
+
+
 def risk_label(prob):
     """Risk buckets: low / medium / high / critical."""
     if prob < 30:
@@ -144,6 +231,7 @@ def reasons_from_features(media_type, features, fake_probability):
 _REASON_SPECS = {
     "image": [
         ("error_level_analysis", "Error-level consistency", "low_is_bad"),
+        ("ela_local_variance", "No localised AI editing artifacts", "low_is_bad"),
         ("texture_uniformity", "Natural texture variance", "low_is_bad"),
         ("recompression_similarity", "Recompression similarity", "low_is_bad"),
         ("metadata_anomaly", "Metadata completeness", "low_is_bad"),

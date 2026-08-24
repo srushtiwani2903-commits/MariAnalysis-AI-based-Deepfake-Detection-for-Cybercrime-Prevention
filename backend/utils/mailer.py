@@ -1,8 +1,7 @@
-"""E-mail sending for password reset links.
+"""Sends password reset e-mails via smtplib (stdlib only, no extra deps).
 
-Uses smtplib (stdlib only - no extra dependency). When SMTP is not
-configured (MAIL_ENABLED=false), the reset link is written to
-security/logs/reset_links.log so local/dev builds can still be tested.
+With SMTP off (MAIL_ENABLED=false) the reset link is logged to
+security/logs/reset_links.log so local/dev builds still work.
 """
 import logging
 import os

@@ -9,36 +9,39 @@ import FileUpload from "../components/FileUpload";
 import ScanLoader from "../components/ScanLoader";
 import api from "../api/api";
 
+const GB = 1024;
 const MEDIA = [
   {
     key: "image", title: "Image", desc: "PNG, JPG, WebP, BMP, TIFF",
-    icon: PhotoIcon, color: "from-neon-blue to-cyan-400",
-    accept: ".png,.jpg,.jpeg,.webp,.bmp,.tiff", maxMB: 50,
+    icon: PhotoIcon, color: "accent-imgscan-dark from-neon-blue to-neon-cyan",
+    accept: ".png,.jpg,.jpeg,.webp,.bmp,.tiff", maxMB: 1 * GB,
     loader: "Running error-level analysis, texture stats and metadata forensics…",
     engine: "Kaggle reference: real-and-fake-face-detection",
   },
   {
     key: "video", title: "Video", desc: "MP4, AVI, MOV, MKV, WebM",
     icon: FilmIcon, color: "from-neon-purple to-fuchsia-500",
-    accept: ".mp4,.avi,.mov,.mkv,.webm", maxMB: 200,
+    accept: ".mp4,.avi,.mov,.mkv,.webm", maxMB: 20 * GB,
     loader: "Extracting frames, detecting faces, running temporal analysis…",
     engine: "Kaggle reference: deepfake-videos-dataset",
   },
   {
     key: "audio", title: "Audio", desc: "MP3, WAV, OGG, FLAC, M4A",
     icon: MusicalNoteIcon, color: "from-pink-500 to-rose-400",
-    accept: ".mp3,.wav,.ogg,.flac,.m4a", maxMB: 100,
+    accept: ".mp3,.wav,.ogg,.flac,.m4a", maxMB: 10 * GB,
     loader: "Computing spectrogram, spectral flatness and MFCC features…",
     engine: "Kaggle reference: audio-deepfake-detection-dataset",
   },
   {
     key: "text", title: "Text", desc: "Paste or type content",
     icon: DocumentTextIcon, color: "from-amber-400 to-orange-500",
-    accept: ".txt,.md,.csv", maxMB: 5,
+    accept: ".txt,.md,.csv", maxMB: 20 * GB,
     loader: "Computing perplexity, burstiness and sentence anomaly scores…",
     engine: "Kaggle reference: ai-vs-human-text-classification",
   },
 ];
+
+const MAX_TEXT_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB
 
 export default function ScanHub() {
   const navigate = useNavigate();
@@ -67,6 +70,10 @@ export default function ScanHub() {
   };
 
   const analyzeText = async () => {
+    if (new Blob([text]).size > MAX_TEXT_BYTES) {
+      setError("Text exceeds the 20 GB limit. Not more than 20 GB will accept.");
+      return;
+    }
     setError("");
     setAnalyzing(true);
     try {
@@ -99,11 +106,10 @@ export default function ScanHub() {
         <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-blue to-neon-purple text-white mb-4">
           <ShieldExclamationIcon className="w-8 h-8" />
         </span>
-        <h1 className="text-3xl font-bold">Deepfake Scan Center</h1>
+        <h1 className="text-3xl font-bold">Scan Center</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-2xl mx-auto">
-          Pick a media type below, drop your file, and MariAnalysis will scan it using the
-          Kaggle reference datasets — detecting AI-generated or manipulated content and
-          giving you prevention guidance.
+          Pick a media type below, drop your file, and MariAnalysis will check it for
+          signs of AI generation or manipulation — then suggest what to do next.
         </p>
       </motion.div>
 
@@ -209,9 +215,9 @@ export default function ScanHub() {
       {/* Detection + prevention explainer */}
       <div className="mt-8 grid sm:grid-cols-3 gap-4">
         {[
-          ["Scan", "Every file is checked against the Kaggle reference datasets using the heuristic engines."],
-          ["Detect", "AI probability, risk level and explainable feature analysis identify manipulated content."],
-          ["Prevent", "Download a forensic PDF/CSV report with recommended actions to avoid being misled."],
+          ["Scan", "Your file is analyzed using the built-in detection engines plus the Kaggle reference data."],
+          ["Detect", "You get an AI probability, a risk level, and a breakdown of which features point to a fake."],
+          ["Prevent", "Download a PDF/CSV report with practical steps to stay safe."],
         ].map(([t, d], i) => (
           <motion.div key={t} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.08 }}
             className="glass rounded-xl p-5">

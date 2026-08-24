@@ -26,14 +26,14 @@ import { useAuth } from "../context/AuthContext";
 import { humanSize, timeAgo } from "../utils/format";
 
 const detectors = [
-  { to: "/detect/image", icon: PhotoIcon, title: "Image Detection", desc: "Photos, faces, screenshots", color: "from-neon-blue to-cyan-400" },
+  { to: "/detect/image", icon: PhotoIcon, title: "Image Detection", desc: "Photos, faces, screenshots", color: "accent-imgscan-dark from-neon-blue to-neon-cyan" },
   { to: "/detect/video", icon: FilmIcon, title: "Video Detection", desc: "MP4, AVI, MOV, WebM", color: "from-neon-purple to-fuchsia-500" },
   { to: "/detect/audio", icon: MusicalNoteIcon, title: "Audio Detection", desc: "MP3, WAV, OGG, FLAC", color: "from-pink-500 to-rose-400" },
   { to: "/detect/text", icon: DocumentTextIcon, title: "Text Detection", desc: "AI-written content, phishing", color: "from-amber-400 to-orange-500" },
 ];
 
 const tools = [
-  { to: "/detect/realtime", icon: VideoCameraIcon, title: "Live Webcam Check", desc: "Real-time frame analysis", color: "from-cyan-400 to-neon-blue" },
+  { to: "/detect/realtime", icon: VideoCameraIcon, title: "Live Webcam Check", desc: "Real-time frame analysis", color: "from-neon-cyan to-neon-blue" },
   { to: "/detect/email", icon: EnvelopeIcon, title: "Email Scanner", desc: "Phishing & AI-written mail", color: "from-pink-500 to-rose-400" },
   { to: "/detect/social", icon: ShareIcon, title: "Social Post", desc: "Image + caption verification", color: "from-violet-500 to-neon-purple" },
   { to: "/evidence", icon: FingerPrintIcon, title: "Report Fraud", desc: "Evidence + case ID", color: "from-amber-400 to-orange-500" },
@@ -65,16 +65,16 @@ export default function Dashboard() {
         <div className="scan-overlay opacity-30" />
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-sm text-neon-blue font-medium">Security Dashboard</p>
+            <p className="text-sm text-neon-blue font-medium">My Dashboard</p>
             <h1 className="text-2xl sm:text-3xl font-bold mt-1">
               Welcome back, <span className="neon-text">{user?.username}</span>
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-2">
-              Monitor your scans, verify media integrity and stay protected against deepfakes.
+              See your recent scans, check how often fakes show up, and start a new one.
             </p>
           </div>
           <div className="flex gap-3">
-            <Link to="/detect" className="btn-primary">
+            <Link to="/detect" className="btn-primary accent-g-emerald">
               <DocumentMagnifyingGlassIcon className="w-5 h-5" /> New Scan
             </Link>
           </div>
@@ -83,7 +83,7 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard icon={DocumentMagnifyingGlassIcon} label="Total Scans" value={stats?.total_scans ?? "—"} />
+        <StatCard icon={DocumentMagnifyingGlassIcon} label="Total Scans" value={stats?.total_scans ?? "—"} color="accent-g-lime accent-total-red" />
         <StatCard icon={ShieldExclamationIcon} label="Fake Detected" value={stats?.fake_detected ?? "—"} color="from-rose-500 to-red-500" delay={0.1} />
         <StatCard icon={ShieldCheckIcon} label="Real Detected" value={stats?.real_detected ?? "—"} color="from-emerald-500 to-green-500" delay={0.2} />
         <StatCard icon={ChartBarIcon} label="Detection Accuracy" value={stats?.accuracy ?? "—"} suffix="%" color="from-neon-purple to-fuchsia-500" delay={0.3} />

@@ -22,6 +22,7 @@ import RealtimeCam from "./pages/RealtimeCam";
 import EmailDetection from "./pages/EmailDetection";
 import SocialPostDetection from "./pages/SocialPostDetection";
 import Evidence from "./pages/Evidence";
+import VerifyProof from "./pages/VerifyProof";
 import OrgDashboard from "./pages/OrgDashboard";
 import Results from "./pages/Results";
 import History from "./pages/History";
@@ -40,6 +41,8 @@ const pageVariants = {
   exit: { opacity: 0, y: -10 },
 };
 
+const smoothEase = [0.22, 1, 0.36, 1];
+
 function AnimatedRoutes() {
   const location = useLocation();
   return (
@@ -50,7 +53,7 @@ function AnimatedRoutes() {
         initial="initial"
         animate="animate"
         exit="exit"
-        transition={{ duration: 0.3, ease: "easeOut" }}
+        transition={{ duration: 0.45, ease: smoothEase }}
         className="min-h-screen"
       >
         <Routes location={location}>
@@ -86,6 +89,8 @@ function AnimatedRoutes() {
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/docs" element={<ApiDocs />} />
+          <Route path="/verify" element={<VerifyProof />} />
+          <Route path="/verify/:type/:id" element={<VerifyProof />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </motion.main>

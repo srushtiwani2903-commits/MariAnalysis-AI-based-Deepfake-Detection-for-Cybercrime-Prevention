@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ClockIcon, DocumentArrowDownIcon,
   ScaleIcon, BeakerIcon, FingerPrintIcon, QrCodeIcon, ShieldCheckIcon,
-  LockClosedIcon, CubeIcon,
+  LockClosedIcon, CubeIcon, CpuChipIcon, WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import ResultBadge from "../components/ResultBadge";
 import ConfidenceBar from "../components/ConfidenceBar";
@@ -17,7 +17,7 @@ import DeepfakeTimeline from "../components/DeepfakeTimeline";
 import api from "../api/api";
 import { formatDate, riskColor, humanSize } from "../utils/format";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.REACT_APP_API_URL || "/api";
 
 export default function Results() {
   const { scanId } = useParams();
@@ -27,7 +27,6 @@ export default function Results() {
   const [loading, setLoading] = useState(!scan);
   const [downloading, setDownloading] = useState(false);
   const [proof, setProof] = useState(null);
-  const [proofLoading, setProofLoading] = useState(false);
   const [proofError, setProofError] = useState("");
   const [registering, setRegistering] = useState(false);
   const [heatmapUrl, setHeatmapUrl] = useState(null);
@@ -57,19 +56,6 @@ export default function Results() {
     }
   }, [scanId, scan]);
 
-  const checkProof = async () => {
-    setProofLoading(true);
-    setProofError("");
-    try {
-      const { data } = await api.get(`/evidence/verify/${scanId}`);
-      setProof(data);
-    } catch (e) {
-      setProofError(e.response?.data?.message || e.message);
-    } finally {
-      setProofLoading(false);
-    }
-  };
-
   const registerCase = async () => {
     setRegistering(true);
     setProofError("");
@@ -85,10 +71,7 @@ export default function Results() {
 
   const download = (fmt) => {
     setDownloading(true);
-    const token = localStorage.getItem("deepguard-token");
-    fetch(`${API_URL}/reports/${scanId}/${fmt}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`${API_URL}/reports/${scanId}/${fmt}`, { credentials: "include" })
       .then((r) => r.blob())
       .then((blob) => {
         const url = URL.createObjectURL(blob);
@@ -115,6 +98,11 @@ export default function Results() {
   const models = full?.models || scan.models || [];
   const reasons = full?.reasons || scan.reasons || [];
   const heatmapFile = full?.scan_metadata?.heatmap_file || scan.scan_metadata?.heatmap_file;
+  const meta = full?.scan_metadata || scan.scan_metadata || {};
+  const aiOrigin = meta.ai_origin || scan.ai_origin || "";
+  const suspiciousScale = meta.suspicious_scale !== undefined && meta.suspicious_scale !== ""
+    ? Number(meta.suspicious_scale)
+    : (scan.suspicious_scale ?? scan.fake_probability);
   const summary = `${scan.result} ${scan.filename} confidence ${Math.round(scan.confidence)}% fake probability ${Math.round(scan.fake_probability)}%. ${scan.explanation || ""}`;
 
   return (
@@ -138,6 +126,29 @@ export default function Results() {
         <div className="grid lg:grid-cols-2 gap-8 items-center">
           <div className="space-y-5">
             <ResultBadge result={scan.result} confidence={scan.confidence} />
+            {aiOrigin && aiOrigin !== "authentic" && (
+              <div className={`inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl border ${
+                aiOrigin === "ai_generated"
+                  ? "text-rose-300 border-rose-400/40 bg-rose-400/10"
+                  : "text-amber-300 border-amber-400/40 bg-amber-400/10"
+              }`}>
+                {aiOrigin === "ai_generated"
+                  ? <CpuChipIcon className="w-7 h-7" />
+                  : <WrenchScrewdriverIcon className="w-7 h-7" />}
+                <div>
+                  <p className="font-bold text-base leading-none">
+                    {aiOrigin === "ai_generated"
+                      ? `AI GENERATED ${scan.scan_type?.toUpperCase()}`
+                      : "AI CONVERTED / MANIPULATED"}
+                  </p>
+                  <p className="text-xs opacity-80 mt-1">
+                    {aiOrigin === "ai_generated"
+                      ? "Created entirely by an AI generator"
+                      : "Authentic media converted or edited using AI tools"}
+                  </p>
+                </div>
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-bold truncate">{scan.filename}</h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -167,8 +178,15 @@ export default function Results() {
           {/* Confidence meters */}
           <div className="space-y-5">
             <ConfidenceBar value={scan.confidence} label={`Result Confidence (${scan.result})`} />
+            <ConfidenceBar value={suspiciousScale} label="Suspicious Scale" />
             <ConfidenceBar value={scan.fake_probability} label="AI / Fake Probability" />
             <ConfidenceBar value={100 - scan.confidence} label="Alternative Likelihood" />
+            {suspiciousScale > scan.fake_probability && (
+              <p className="text-xs text-amber-300 bg-amber-400/10 border border-amber-400/30 rounded-xl px-4 py-3 flex items-center gap-2">
+                <WrenchScrewdriverIcon className="w-4 h-4" />
+                Suspicion boosted because AI tools were likely used to convert or edit this media.
+              </p>
+            )}
           </div>
         </div>
 
@@ -185,7 +203,7 @@ export default function Results() {
               <div>
                 <p className="text-sm font-semibold">Manipulation Heatmap</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Red regions mark the areas most likely to have been altered by AI generation.
+                  Red regions are where the file most likely shows signs of AI editing.
                 </p>
               </div>
             </div>
@@ -203,9 +221,9 @@ export default function Results() {
           <button onClick={() => download("qr")} disabled={downloading} className="btn-secondary">
             <QrCodeIcon className="w-5 h-5" /> QR Code
           </button>
-          <button onClick={checkProof} disabled={proofLoading} className="btn-secondary">
-            <LockClosedIcon className="w-5 h-5" /> {proofLoading ? "Checking…" : proof ? "Re-verify" : "Verify Proof"}
-          </button>
+          <Link to={`/verify/scan/${scanId}`} className="btn-secondary">
+            <LockClosedIcon className="w-5 h-5" /> Verify Proof
+          </Link>
         </div>
 
         {/* Blockchain proof */}
@@ -237,7 +255,7 @@ export default function Results() {
       <div className="grid lg:grid-cols-3 gap-6">
         <GlassCard className="lg:col-span-2">
           <h2 className="font-bold mb-3 flex items-center gap-2">
-            <ScaleIcon className="w-5 h-5 text-neon-blue" /> Explainable AI — Why this verdict?
+            <ScaleIcon className="w-5 h-5 text-neon-blue" /> Why this verdict?
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{scan.explanation}</p>
 
@@ -287,7 +305,7 @@ export default function Results() {
             ))}
           </ul>
           <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400">
-            Download the forensic PDF / QR report to share this verification and warn others.
+            Download the PDF or QR report to keep this check on record or share it with others.
           </div>
         </GlassCard>
       </div>
@@ -299,13 +317,13 @@ export default function Results() {
           <ShieldCheckIcon className="w-6 h-6 text-emerald-400" /> Prevention Guidance
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">
-          Protecting yourself against {scan.scan_type} deepfakes — act on these steps.
+          If this {scan.scan_type} was flagged as a deepfake, these steps can help you respond.
         </p>
         <div className="grid sm:grid-cols-3 gap-4 text-sm">
           {[
             ["Verify the source", "Confirm the sender through a second channel before trusting or forwarding."],
-            ["Don't share / repost", "Spreading a detected fake amplifies harm — report it instead."],
-            ["Backup evidence", "Save this forensic report as your record for authorities/platforms."],
+            ["Don't share / repost", "Spreading a detected fake makes it worse — report it instead."],
+            ["Backup evidence", "Save this report as your record for authorities or platforms."],
           ].map(([t, d], i) => (
             <div key={t} className="rounded-2xl bg-white/40 dark:bg-white/5 p-4">
               <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 text-white font-bold text-xs mb-2">{i + 1}</span>

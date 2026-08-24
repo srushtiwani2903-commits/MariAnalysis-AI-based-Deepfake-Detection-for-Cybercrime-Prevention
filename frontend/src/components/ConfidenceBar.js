@@ -18,7 +18,7 @@ export default function ConfidenceBar({ value, label, color }) {
           className={`h-full rounded-full bg-gradient-to-r ${barColor} glow-progress`}
           initial={{ width: 0 }}
           animate={{ width: `${v}%` }}
-          transition={{ duration: 0.9, ease: "easeOut" }}
+          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
         />
       </div>
     </div>

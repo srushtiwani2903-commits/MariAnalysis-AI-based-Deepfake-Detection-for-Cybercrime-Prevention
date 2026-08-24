@@ -1,14 +1,11 @@
 # Optional analysis/kaggle dependencies for the heuristic engine + Kaggle data pipeline.
 # pip install -r requirements-ai.txt
-numpy==1.26.4
-opencv-python==4.10.0.84
-librosa==0.10.2
-mediapipe
+numpy>=2.3
+opencv-python>=4.12
+librosa>=0.10.2
+mediapipe>=1.0
 kaggle==2.2.4
-# Local offline AI models (image ViT + RoBERTa text detector) - optional.
-# First scan auto-downloads weights to the Hugging Face cache (~500 MB).
-torch>=2.0.0
-torchvision>=0.15.0
-transformers>=4.40.0
-timm>=0.9.0
-soundfile>=0.12.0
+# PyTorch CNN inference (CPU build is fine for detection latency ~50ms/image).
+# Training happens on Kaggle GPUs via ml/train_cnn_kaggle.py - not here.
+torch>=2.1
+torchvision>=0.16

@@ -49,7 +49,10 @@ export default function ParticleBackground({ density = 70, className = "" }) {
 
     for (let i = 0; i < density; i++) particles.push(new Particle());
 
-    const colors = ["34, 211, 238", "124, 58, 237", "0, 229, 255"];
+    // Theme-aware particle palette: neon blue/purple in dark, cyber green in light
+    const colors = dark
+      ? ["34, 211, 238", "124, 58, 237", "0, 229, 255"]
+      : ["21, 128, 61", "5, 150, 105", "22, 163, 74"];
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);

@@ -11,7 +11,7 @@ export default function ApiDocs() {
     api.get("/docs").then((res) => setEndpoints(res.data.endpoints)).catch(() => {});
   }, []);
 
-  const base = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+  const base = process.env.REACT_APP_API_URL || "/api";
 
   return (
     <div className="container-app py-12 max-w-5xl">
@@ -54,7 +54,9 @@ export default function ApiDocs() {
       <GlassCard hover={false} className="mt-8">
         <h2 className="font-bold mb-3">Authentication</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-          All endpoints except register/login require a JWT Bearer token:
+          The web app authenticates via an HttpOnly session cookie (never
+          readable from JavaScript). API / script clients can get a JWT in the
+          JSON response body and send it as a Bearer token:
         </p>
         <pre className="mt-3 rounded-xl bg-navy-950 p-4 text-xs text-neon-blue overflow-x-auto font-mono">
 {`# 1. Get a token

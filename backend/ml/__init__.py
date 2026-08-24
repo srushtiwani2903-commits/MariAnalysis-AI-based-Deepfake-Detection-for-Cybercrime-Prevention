@@ -1,4 +1,4 @@
-"""ML data package: Kaggle dataset pipeline (direct fetch/extract/use) + dataset registry.
+"""ML data package: the Kaggle pipeline (fetch/extract/use) + dataset registry.
 
-No model training lives here anymore - the app runs on heuristic engines.
+No training happens here - the app runs on heuristic engines.
 """

@@ -1,9 +1,8 @@
-"""API keys (for the browser extension) + the extension analysis endpoint.
+"""API keys for the browser extension plus the /api/extend/analyze endpoint.
 
-- POST   /api/keys            create a key (plaintext shown once; hash + encrypted blob stored)
-- GET    /api/keys            list your keys
-- DELETE /api/keys/<id>       revoke a key
-- POST   /api/extend/analyze  analyse a media URL with an API key (no JWT needed)
+Keys are shown once at creation; at rest only their hash + encrypted blob are
+kept. /api/extend/analyze lets the extension analyse a media URL with a key
+(no JWT needed).
 """
 import hashlib
 import os
@@ -53,8 +52,8 @@ def create_key():
                        details=f"API key '{key.label}' created", ip_address=request.remote_addr))
     db.session.commit()
     audit("create", user_id, "ApiKey", key.id, request.remote_addr, "API key created")
-    # Plaintext is returned exactly once; at rest only its SHA-256 hash and a
-    # Fernet-encrypted blob exist (recoverable only via the server master secret).
+    # Plaintext is shown exactly once; at rest there's only the SHA-256 hash
+    # plus a Fernet-encrypted blob (recoverable via the server master secret).
     return jsonify({"message": "API key created. Copy it now - it won't be shown again.",
                     "key": plaintext, "record": key.to_dict()}), 201
 
@@ -110,7 +109,7 @@ def extend_analyze():
     if ext not in Config.ALLOWED_IMAGE:
         return jsonify({"message": "Only image analysis is supported by the extension."}), 400
     file = FileStorage(stream=stream, filename=f"ext.{ext}")
-    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_CONTENT_LENGTH, 10 * 1024 * 1024))
+    ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_IMAGE_BYTES, 10 * 1024 * 1024))
     if not ok:
         return jsonify({"message": msg}), 400
     path, stored_name, _ = save_upload(file, Config.UPLOAD_FOLDER, file.filename)

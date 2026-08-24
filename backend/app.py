@@ -1,7 +1,7 @@
-﻿"""MariAnalysis - Flask application factory and entry point.
+﻿"""MariAnalysis - Flask app factory and entry point.
 
-Run locally:   python run.py
-Run in prod:   gunicorn -w 4 -b 0.0.0.0:5000 app:app
+Local:   python run.py
+Prod:    gunicorn -w 4 -b 0.0.0.0:5001 app:app
 """
 import os
 from datetime import datetime, timezone
@@ -33,7 +33,10 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # --- CORS ---
-    CORS(app, resources={r"/api/*": {"origins": Config.CORS_ORIGINS}}, supports_credentials=False)
+    # supports_credentials lets the cookie-based web session flow through when
+    # the API is called cross-origin; the dev frontend is same-origin via the
+    # CRA proxy so no CORS is even involved there.
+    CORS(app, resources={r"/api/*": {"origins": Config.CORS_ORIGINS}}, supports_credentials=True)
 
     # --- Security headers on every response ---
     @app.after_request
@@ -56,11 +59,10 @@ def create_app(config_class=Config):
     db.init_app(app)
     jwt.init_app(app)
 
-    # --- Revoked-session check: a JWT is rejected (401) as soon as its
-    # ActiveSession row is deactivated, e.g. by a newer login somewhere else
-    # or by logout. This is what makes the kicked-out device fail immediately.
-    # It also tracks activity (last_seen_at) and enforces the inactivity
-    # timeout, so the backend is the single source of truth for session state.
+    # A JWT dies with its ActiveSession row: once that row is deactivated
+    # (new login elsewhere, logout, inactivity timeout) the token gets a 401
+    # immediately. Also keeps last_seen_at fresh so the backend is the single
+    # source of truth for session state.
     @jwt.token_in_blocklist_loader
     def check_session_revoked(_jwt_header, jwt_payload):
         jti = jwt_payload.get("jti")
@@ -82,9 +84,8 @@ def create_app(config_class=Config):
                 session.revoked_reason = "inactivity"
                 db.session.commit()
                 return True
-        # The token is valid: refresh the activity timestamp. The SSE stream is
-        # a single long-lived request, so this runs once at connect time and
-        # does not keep idle tabs alive forever.
+        # Valid token: refresh the activity stamp. This runs once at SSE
+        # connect time, so it doesn't keep idle tabs alive on its own.
         session.last_seen_at = now
         db.session.commit()
         return False
@@ -108,8 +109,8 @@ def create_app(config_class=Config):
 
     @jwt.revoked_token_loader
     def revoked_token(_jwt_header, jwt_payload):
-        # The only way a token is revoked is that its ActiveSession row was
-        # deactivated - which happens when the same account logs in elsewhere.
+        # A revoked token means its ActiveSession row was deactivated - which
+        # happens when the same account logs in elsewhere.
         jti = jwt_payload.get("jti")
         reason = "superseded"
         if jti:
@@ -237,8 +238,8 @@ def create_app(config_class=Config):
             db.session.commit()
         _purge_stale_uploads(app)
 
-    # --- Kaggle credential check (data is fetched on-demand during training,
-    # never downloaded at startup) ---
+    # Kaggle credentials checked in the background; datasets are only pulled
+    # on demand during training, never at startup.
     if Config.KAGGLE_AUTOSYNC:
         from ml.kaggle_pipeline import write_kaggle_json
         import threading
@@ -252,9 +253,8 @@ def create_app(config_class=Config):
 
         threading.Thread(target=_check_creds, daemon=True).start()
 
-    # --- Kaggle reference profile (background, best-effort) ---
-    # On the first scan the profile is built lazily; pre-empting it here means
-    # the Live Webcam Check / URL scan already have it ready on first frame.
+    # Pre-build the Kaggle reference profile in the background so the webcam
+    # and URL scans already have it ready on the first frame.
     if Config.KAGGLE_REFERENCE_ENABLED:
         from services.kaggle_reference import kaggle_reference
         import threading
@@ -326,4 +326,4 @@ def _purge_stale_uploads(app):
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=Config.DEBUG)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)), debug=Config.DEBUG)

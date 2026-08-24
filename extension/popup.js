@@ -1,5 +1,5 @@
 // DeepGuard popup logic: save API key + quick URL analysis.
-const API_URL = "http://localhost:5000/api";
+const API_URL = "http://localhost:5001/api";
 const keyInput = document.getElementById("apiKey");
 const urlInput = document.getElementById("imgUrl");
 const statusEl = document.getElementById("status");

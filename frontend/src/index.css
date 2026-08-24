@@ -7,12 +7,18 @@
     --bg: #f1f5f9;
     --fg: #0f172a;
     --muted: #64748b;
+    /* Light theme accent: cyber dark green */
+    --accent: 21 128 61;   /* #15803d */
+    --accent-2: 5 150 105; /* #059669 */
   }
 
   html.dark {
     --bg: #050816;
     --fg: #e2e8f0;
     --muted: #94a3b8;
+    /* Dark theme accent: original neon blue/cyan */
+    --accent: 34 211 238;  /* #22d3ee */
+    --accent-2: 0 229 255; /* #00e5ff */
   }
 
   body {
@@ -21,10 +27,13 @@
     font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     transition: background-color 0.4s ease, color 0.4s ease;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   ::selection {
-    background: rgba(34, 211, 238, 0.35);
+    background: rgb(var(--accent) / 0.35);
     color: inherit;
   }
 
@@ -32,7 +41,7 @@
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #22d3ee, #7c3aed);
+    background: rgb(var(--accent));
     border-radius: 8px;
   }
 }
@@ -47,10 +56,25 @@
     @apply bg-white/80 dark:bg-white/10 backdrop-blur-2xl border border-slate-200 dark:border-white/10 shadow-glass;
   }
 
-  /* Neon gradient text */
+  /* Neon gradient text (dark). Light theme: solid green, no gradient */
   .neon-text {
-    @apply bg-gradient-to-r from-neon-blue via-neon-cyan to-neon-purple bg-clip-text text-transparent;
+    display: inline-block;
+    padding-right: 0.12em;
+    background-image: linear-gradient(90deg, rgb(var(--accent)), #7c3aed, rgb(var(--accent-2)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
   }
+
+  html:not(.dark) .neon-text {
+    background-image: none;
+    -webkit-text-fill-color: rgb(var(--accent));
+    color: rgb(var(--accent));
+  }
+
+  /* ── Accent override rules live at the END of this file (unlayered) so they
+     always beat the generated gradient utilities — see bottom of file. ── */
 
   /* Primary button */
   .btn-primary {
@@ -80,8 +104,8 @@
   /* Animated grid backdrop */
   .cyber-grid {
     background-image:
-      linear-gradient(rgba(34, 211, 238, 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(34, 211, 238, 0.06) 1px, transparent 1px);
+      linear-gradient(rgb(var(--accent) / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--accent) / 0.06) 1px, transparent 1px);
     background-size: 45px 45px;
   }
 
@@ -106,8 +130,9 @@
   right: 0;
   height: 90px;
   top: 0%;
-  animation: scanline 2.2s ease-in-out infinite;
-  background: linear-gradient(180deg, transparent, rgba(34, 211, 238, 0.25), transparent);
+  animation: scanline 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  background: linear-gradient(180deg, transparent, rgb(var(--accent) / 0.25), transparent);
+  will-change: top;
 }
 @keyframes scanline {
   0%, 100% { top: -10%; }
@@ -117,7 +142,7 @@
 /* Typing cursor for terminal styling */
 .terminal-cursor::after {
   content: "▊";
-  color: #22d3ee;
+  color: rgb(var(--accent));
   animation: blink 1s step-end infinite;
   margin-left: 2px;
 }
@@ -128,7 +153,7 @@
 
 /* Shimmer loading bar */
 .shimmer {
-  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.4), transparent);
+  background: linear-gradient(90deg, transparent, rgb(var(--accent) / 0.4), transparent);
   background-size: 200% 100%;
   animation: shimmer 2.5s linear infinite;
 }
@@ -136,7 +161,14 @@
 /* Progress bar with glow */
 .glow-progress {
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 12px rgba(34, 211, 238, 0.6);
+  box-shadow: 0 0 12px rgb(var(--accent) / 0.6);
+}
+
+/* Light-theme overrides for static cyan effects from tailwind.config */
+html:not(.dark) .bg-grid-pattern {
+  background-image:
+    linear-gradient(rgba(21, 128, 61, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 128, 61, 0.05) 1px, transparent 1px);
 }
 
 /* Hide scrollbar utility */
@@ -150,4 +182,37 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   THEME ACCENT OVERRIDES (unlayered — always beat Tailwind utilities)
+   Light theme: selected surfaces get SOLID green shades.
+   Dark theme: Image Scan badges become dark blue.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Dark green stays on the navbar logo + profile avatar */
+html:not(.dark) .accent-solid-green {
+  background-image: none;
+  background-color: rgb(var(--accent)); /* dark green #15803d */
+}
+
+/* Different shades of green (light theme only) */
+html:not(.dark) .accent-g-emerald { background-image: none; background-color: #047857; } /* emerald-700 */
+html:not(.dark) .accent-g-moss    { background-image: none; background-color: #166534; } /* green-800 */
+html:not(.dark) .accent-g-pine    { background-image: none; background-color: #065f46; } /* emerald-800 */
+html:not(.dark) .accent-g-lime    { background-image: none; background-color: #3f6212; } /* lime-800 */
+html:not(.dark) .accent-g-teal    { background-image: none; background-color: #0f766e; } /* teal-700 */
+html:not(.dark) .accent-g-deep    { background-image: none; background-color: #14532d; } /* green-900 */
+html:not(.dark) .accent-g-forest  { background-image: none; background-color: #1b4332; } /* deep forest */
+
+/* ── Dark theme only: Image Scan badges become dark blue ── */
+html.dark .accent-imgscan-dark {
+  background-image: none !important;
+  background-color: #1e40af !important; /* blue-800 */
+}
+
+/* ── Dark theme only: Total Scans badges become dark red ── */
+html.dark .accent-total-red {
+  background-image: none !important;
+  background-color: #991b1b !important; /* red-800 */
 }

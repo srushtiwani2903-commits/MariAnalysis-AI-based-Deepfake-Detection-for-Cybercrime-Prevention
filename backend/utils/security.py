@@ -1,11 +1,8 @@
 """Security utilities: rate limiting, file validation, sanitization.
 
-Security posture:
-  - SQL injection  : prevented by SQLAlchemy parameterised queries (never raw f-strings).
-  - XSS            : all dynamic content is escaped client-side; API returns plain data only.
-  - CSRF           : the API uses JWT Bearer tokens (no cookies), so CSRF does not apply.
-  - Input sanitize : filenames are stripped, length-limited, and random-renamed before saving.
-  - File security  : extension + magic-byte sniffing, size cap, and no path traversal.
+Queries use SQLAlchemy parameters (no raw f-strings), the API is JWT-only so
+CSRF doesn't apply, dynamic content is escaped client-side, and uploads are
+sanitised, size-capped and checked against magic bytes.
 """
 import base64
 import hashlib
@@ -111,7 +108,7 @@ def allowed_extension(filename: str, allowed_exts: set) -> bool:
 def sniff_matches_magic(extension: str, head: bytes) -> bool:
     """Best-effort magic-byte check. Returns True when the extension matches file content."""
     ext = Path(extension).suffix.lower().lstrip(".") or extension.lower().lstrip(".")
-    # RIFF is a container: WEBP (image) vs WAVE (audio), distinguished at bytes 8:12.
+    # RIFF wraps both WEBP (image) and WAVE (audio); bytes 8:12 tell them apart.
     if head[:4] == b"RIFF":
         if head[8:12] == b"WEBP":
             return ext == "webp"
@@ -122,8 +119,16 @@ def sniff_matches_magic(extension: str, head: bytes) -> bool:
     for magic, magic_ext in table.items():
         if head.startswith(magic):
             return ext == magic_ext
-    # Unknown magic: accept only known-image/video/audio extensions (trust level is degraded).
+    # Unknown magic: fall back to the known extension list (degraded trust).
     return ext in {"jpg", "jpeg", "png", "bmp", "tiff", "webp", "mp4", "avi", "mov", "wav", "flac", "m4a"}
+
+
+def format_limit(max_bytes: int) -> str:
+    """Format a byte cap as '1 GB' / '500 MB' for user-facing messages."""
+    gb = max_bytes / (1024 ** 3)
+    if gb >= 1:
+        return f"{int(gb)} GB" if gb == int(gb) else f"{gb:.1f} GB"
+    return f"{max_bytes // (1024 * 1024)} MB"
 
 
 def validate_upload(file_storage, allowed_exts: set, max_bytes: int):
@@ -147,12 +152,13 @@ def validate_upload(file_storage, allowed_exts: set, max_bytes: int):
         size += len(chunk)
         if size > max_bytes:
             file_storage.stream.seek(0)
-            return False, f"File exceeds the {max_bytes // (1024*1024)} MB limit.", size
+            limit = format_limit(max_bytes)
+            return False, f"File exceeds the {limit} limit. Not more than {limit} will accept.", size
     file_storage.stream.seek(0)
     if size == 0:
         return False, "Empty file uploaded.", 0
 
-    # Magic-byte sniffing: reject files whose content contradicts their extension.
+    # Reject files whose content doesn't match the extension (magic bytes).
     if head and not sniff_matches_magic(filename, head):
         return False, "File content does not match its extension.", size
     return True, "", size

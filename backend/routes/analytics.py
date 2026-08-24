@@ -1,5 +1,5 @@
-"""Analytics endpoints: overview, daily/weekly scans, fake-vs-real, user activity,
-deepfake-type leaderboard and the organisation dashboard."""
+"""Analytics endpoints: overview, scan trends, fake-vs-real, user activity,
+the deepfake-type leaderboard and the organisation dashboard."""
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -13,7 +13,7 @@ from models import Log, ScanHistory, User
 analytics_bp = Blueprint("analytics", __name__)
 
 # --------------------------------------------------------------------------- #
-# Tiny in-memory TTL cache so slow aggregate endpoints stay fast under load.
+# Small in-memory TTL cache keeps the slow aggregate endpoints fast.
 # --------------------------------------------------------------------------- #
 _cache_lock = threading.Lock()
 _cache = {}  # key -> (expires_at, payload)

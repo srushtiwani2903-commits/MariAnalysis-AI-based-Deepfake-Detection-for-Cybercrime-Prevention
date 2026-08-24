@@ -9,10 +9,9 @@ import hashlib
 import os
 import time
 
-from config import Config
-from services.ensemble import (append_real_models, build_models, explain_short,
-                               reasons_from_features, risk_label, trust_score)
-from services.model_providers import blend_scores, gemini_score, score_reason
+from services.ensemble import (build_models, classify_ai_origin, explain_short,
+                               reasons_from_features, risk_label, suspicious_scale,
+                               trust_score)
 
 
 def _probe_video(file_path):
@@ -138,7 +137,7 @@ def analyze_video(file_path, filename, size_bytes):
         sharp.sort()
         median_sharp = sharp[len(sharp) // 2] if sharp else 0
 
-    # Generated faces: smooth, consistent, low motion sharpness variance.
+    # Generated faces look smooth and consistent, with little sharpness variance.
     smooth_face = 1.0 - face_ratio if face_ratio > 0 else 0.0
     flicker = max(0.0, min(1.0, sharpness_var))
     synthetic_drift = max(0.0, min(1.0, drift - 0.5) * 2)
@@ -161,21 +160,21 @@ def analyze_video(file_path, filename, size_bytes):
     base = (
         0.28 * smooth_face + 0.24 * flicker + 0.22 * synthetic_drift + 0.26 * compression
     )
-    # Gemini scores the sampled frames (video is provided as JPEG frames).
-    gemini = gemini_score("video", file_path=file_path)
-    blended = blend_scores(base * 100, gemini, None)
-    base = max(0.0, min(1.0, blended / 100.0))
-    provider_note = score_reason(gemini, "video")
-
     models, fake_probability = build_models("video", base * 100, filename, spread=4.5)
-    models = append_real_models(models, [(gemini, f"Gemini ({Config.GEMINI_MODEL})")])
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
+    ai_origin = classify_ai_origin("video", features, fake_probability)
+    susp = suspicious_scale(fake_probability, ai_origin, features, "video")
     reasons = reasons_from_features("video", features, fake_probability)
     trust = trust_score(fake_probability, {
         "face": face_ratio, "noise": 1.0 - flicker, "compression": 1.0 - compression,
     })
-    explanation = explain_short("video", result, fake_probability) + provider_note
+    explanation = explain_short("video", result, fake_probability)
+    if ai_origin == "ai_manipulated":
+        explanation += (" The video appears to have been converted or edited using AI tools "
+                        "(temporal flicker / face inconsistencies), raising the suspicion scale.")
+    elif ai_origin == "ai_generated":
+        explanation += " The footage shows hallmarks of being generated entirely by AI."
     recommendations = _recommendations(result)
 
     # Per-frame timeline with a verdict for each sampled second.
@@ -207,6 +206,10 @@ def analyze_video(file_path, filename, size_bytes):
         "filename": filename,
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
+        "suspicious_scale": susp,
+        "ai_origin": ai_origin,
+        "ai_generated": ai_origin == "ai_generated",
+        "ai_manipulated": ai_origin == "ai_manipulated",
         "fake_probability": round(fake_probability, 1),
         "trust_score": trust,
         "risk_level": risk,
@@ -219,7 +222,6 @@ def analyze_video(file_path, filename, size_bytes):
         "reasons": reasons,
         "file_hash": file_hash,
         "suspicious_sections": timeline,
-        "ai_providers": {"gemini": gemini, "local": None},
         "model": "temporal-CNN-v1",
     }
 
@@ -242,4 +244,3 @@ def _recommendations(result):
                           "Report to platform moderation and law enforcement.",
                           "Preserve the video file and this report."] + base[:2])
     return "\n".join(base)
-

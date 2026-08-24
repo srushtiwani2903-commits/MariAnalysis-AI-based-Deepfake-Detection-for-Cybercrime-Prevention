@@ -5,11 +5,11 @@ import api from "../api/api";
 
 const QUICK = ["What is a deepfake?", "How does the detection work?", "Can it scan videos?", "How to report fraud?"];
 
-// Floating AI-assistant chat widget.
+// Floating assistant chat widget.
 export default function Chatbot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: "ai", text: "Hi! I'm DeepGuard's AI assistant. Ask me anything about deepfakes, detection or reporting." },
+    { role: "ai", text: "Hi! I can help you understand deepfakes, how detection works, or how to report fraud. What do you want to know?" },
   ]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -22,11 +22,12 @@ export default function Chatbot() {
   const send = async (text) => {
     const q = (text ?? input).trim();
     if (!q || typing) return;
+    const history = messages.slice(-10).map((m) => ({ role: m.role, text: m.text }));
     setMessages((m) => [...m, { role: "user", text: q }]);
     setInput("");
     setTyping(true);
     try {
-      const { data } = await api.post("/chat", { message: q });
+      const { data } = await api.post("/chat", { message: q, history });
       setMessages((m) => [...m, { role: "ai", text: data.reply || "Sorry, I couldn't parse that." }]);
     } catch {
       setMessages((m) => [...m, { role: "ai", text: "I'm having trouble connecting. Please try again." }]);
@@ -45,7 +46,7 @@ export default function Chatbot() {
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             className="fixed bottom-24 right-5 z-50 w-[22rem] max-w-[calc(100vw-2.5rem)] rounded-2xl glass-strong shadow-2xl overflow-hidden"
           >
-            <div className="bg-gradient-to-r from-neon-blue to-neon-purple px-4 py-3 flex items-center justify-between text-white">
+            <div className="accent-g-moss bg-gradient-to-r from-neon-blue to-neon-purple px-4 py-3 flex items-center justify-between text-white">
               <div className="flex items-center gap-2">
                 <ChatBubbleLeftRightIcon className="w-5 h-5" />
                 <span className="font-bold text-sm">DeepGuard Assistant</span>
@@ -59,7 +60,7 @@ export default function Chatbot() {
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
                     m.role === "user"
-                      ? "bg-gradient-to-br from-neon-blue to-neon-purple text-white rounded-br-sm"
+                      ? "accent-g-moss bg-gradient-to-br from-neon-blue to-neon-purple text-white rounded-br-sm"
                       : "glass rounded-bl-sm"
                   }`}>
                     {m.text}
@@ -76,7 +77,7 @@ export default function Chatbot() {
               <div className="flex gap-2 mb-2 flex-wrap">
                 {QUICK.map((q) => (
                   <button key={q} onClick={() => send(q)}
-                    className="text-[11px] px-2 py-1 rounded-full border border-neon-blue/40 text-neon-blue dark:text-cyan-300 hover:bg-neon-blue/10">
+                    className="text-[11px] px-2 py-1 rounded-full border border-neon-blue/40 text-neon-blue hover:bg-neon-blue/10">
                     {q}
                   </button>
                 ))}
@@ -104,7 +105,7 @@ export default function Chatbot() {
         whileTap={{ scale: 0.94 }}
         onClick={() => setOpen((o) => !o)}
         aria-label="Toggle assistant"
-        className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple text-white shadow-xl shadow-neon-purple/30 flex items-center justify-center"
+        className="accent-g-moss fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple text-white shadow-xl shadow-neon-purple/30 flex items-center justify-center"
       >
         {open ? <XMarkIcon className="w-6 h-6" /> : <ChatBubbleLeftRightIcon className="w-6 h-6" />}
       </motion.button>

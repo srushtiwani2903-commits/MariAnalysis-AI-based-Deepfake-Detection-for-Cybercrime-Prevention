@@ -1,11 +1,8 @@
 """Cybercrime reporting portal + blockchain evidence ledger.
 
-- POST   /api/evidence/<scan_id>/register  -> create a case (DF-YYYY-NNNN),
-  anchor the scan in the blockchain ledger and generate the evidence PDF.
-- GET    /api/evidence/cases               -> the current user's reported cases.
-- GET    /api/evidence/chain               -> tamper-evident chain summary.
-- GET    /api/evidence/verify/<scan_id>    -> verify a scan's block integrity.
-- POST   /api/evidence/<case_id>/status    -> update case status (owner).
+Registers a scan as a case (DF-YYYY-NNNN), anchors it in the tamper-evident
+chain and generates the evidence PDF; also serves the cases, chain, verify
+and status endpoints.
 """
 import hashlib
 from datetime import datetime, timezone
@@ -144,6 +141,54 @@ def verify(scan_id):
         return jsonify({"message": "No blockchain evidence exists for this scan.",
                         "registered": False}), 404
     return jsonify({"registered": True, **res})
+
+
+def _public_case_payload(case):
+    """Shared payload for the public verify endpoints (no auth needed)."""
+    scan = db.session.get(ScanHistory, case.scan_id)
+    block = BlockchainBlock.query.filter_by(scan_id=case.scan_id).first()
+    res = blockchain.verify_scan(case.scan_id) if block else None
+    return {
+        "case": {
+            "case_id": case.case_id,
+            "status": case.status,
+            "platform": case.platform,
+            "created_at": case.created_at.isoformat() if case.created_at else None,
+            "report_hash": case.report_hash,
+        },
+        "scan": {
+            "id": case.scan_id,
+            "result": scan.result if scan else None,
+            "scan_type": scan.scan_type if scan else None,
+            "fake_probability": scan.fake_probability if scan else None,
+            "trust_score": scan.trust_score if scan else None,
+        } if scan else None,
+        "registered": bool(block),
+        "intact": bool(res and res["intact"]),
+        "chain_valid": blockchain.is_chain_valid()[0],
+        "block": res["block"] if res else None,
+    }
+
+
+@evidence_bp.route("/verify-case/<case_id>", methods=["GET"])
+def verify_public_case(case_id):
+    """Public proof check: anyone with a case ID can confirm the evidence."""
+    case = EvidenceCase.query.filter_by(case_id=case_id).first()
+    if not case:
+        return jsonify({"message": "Case not found.", "found": False}), 404
+    return jsonify({"found": True, **_public_case_payload(case)})
+
+
+@evidence_bp.route("/verify-scan/<int:scan_id>", methods=["GET"])
+def verify_public_scan(scan_id):
+    """Public proof check by scan ID (works even without a registered case)."""
+    res = blockchain.verify_scan(scan_id)
+    if not res:
+        return jsonify({"message": "No blockchain evidence exists for this scan.",
+                        "found": False, "registered": False}), 404
+    case = EvidenceCase.query.filter_by(scan_id=scan_id).first()
+    return jsonify({"found": True, "registered": True,
+                    "case": case.to_dict() if case else None, **res})
 
 
 @evidence_bp.route("/<string:case_id>/status", methods=["POST"])

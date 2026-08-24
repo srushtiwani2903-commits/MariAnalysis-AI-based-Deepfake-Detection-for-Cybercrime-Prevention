@@ -1,7 +1,6 @@
-"""Fake-news + deepfake combined analysis for a social-media post.
+"""Fake-news + deepfake analysis for a social-media post.
 
-Fuses the image verdict with the caption (text) verdict into a single
-misinformation score.
+Fuses the image and caption verdicts into one misinformation score.
 """
 import time
 

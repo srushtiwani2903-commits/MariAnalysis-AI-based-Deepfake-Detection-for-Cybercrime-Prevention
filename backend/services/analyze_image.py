@@ -1,8 +1,8 @@
-"""Image deepfake analysis.
+"""Image deepfake analysis using heuristic signals.
 
-Heuristic engine (works without a model): Error Level Analysis (ELA) + color
-statistics + metadata forensics + face/eye/lighting analysis (OpenCV when
-available) + multi-model ensemble + XAI reasons + trust score + heatmap.
+Runs Error Level Analysis, color stats, metadata forensics, and face/eye/
+lighting checks (OpenCV when available), then the ensemble + trust score +
+XAI reasons + heatmap. No model weights needed.
 """
 import hashlib
 import io
@@ -13,10 +13,9 @@ from PIL import Image, ImageChops, ImageStat
 from PIL.ExifTags import TAGS
 
 from config import Config
-from services.ensemble import (append_real_models, build_models, explain_short,
-                               reasons_from_features, risk_label, trust_score)
-from services.model_providers import (blend_scores, gemini_score, local_score,
-                                      score_reason)
+from services.ensemble import (build_models, classify_ai_origin, explain_short,
+                               reasons_from_features, risk_label, suspicious_scale,
+                               trust_score)
 
 
 def _average_hash(image, hash_size=16):
@@ -183,6 +182,15 @@ def analyze_image(file_path, filename, size_bytes):
             return _pack_failure("Unsupported or corrupted image file.")
 
         _ela_rms, diff = _error_level_analysis(img)
+        # Spatial variance of the ELA difference map: high values mean the
+        # recompression error is concentrated in patches -> localised AI edits
+        # (face-swap, inpainting, enhancement) rather than a uniform synthetic source.
+        try:
+            import numpy as np
+            diff_arr = np.asarray(diff.convert("L"), dtype=np.float32)
+            ela_local_variance = float(min(1.0, diff_arr.std() / 30.0))
+        except Exception:  # noqa: BLE001
+            ela_local_variance = 0.0
         shared = feature_vector(img)
 
     meta = _extract_metadata(file_path)
@@ -192,17 +200,17 @@ def analyze_image(file_path, filename, size_bytes):
     face = _face_analysis(file_path)
 
     # -------------------------- heuristic scoring -------------------------- #
-    # 1) ELA: genuine photos usually show low localised recompression error.
+    # High localised recompression error points to tampering.
     ela_score = shared["error_level_analysis"]
-    # 2) Overly smooth / uniform images are common in generated faces.
+    # Generated faces tend to be overly smooth and uniform.
     texture_score = shared["texture_uniformity"]
-    # 3) Missing or stripped metadata raises suspicion for some types.
+    # Missing or stripped metadata is mildly suspicious.
     meta_score = 0.0 if meta.get("has_exif") else 0.35
-    # 4) Near-lossless recompression similarity too high => possible synthetic.
+    # Being too similar after lossy recompression suggests a synthetic source.
     recomp_score = shared["recompression_similarity"]
-    # 5) Low color variance (flat / uncanny) bias.
+    # Low color variance reads flat / uncanny.
     flatness = shared["color_flatness"]
-    # 6) Face heuristics (when a face is present).
+    # Face heuristics only apply when a face is present.
     if face["faces_detected"]:
         face_score = (1.0 - face["face_consistency"]) * 0.6 + (1.0 - face["eye_blink_pattern"]) * 0.4
         lighting_score = 1.0 - face["lighting_consistency"]
@@ -214,6 +222,7 @@ def analyze_image(file_path, filename, size_bytes):
 
     features = {
         "error_level_analysis": round(ela_score, 4),
+        "ela_local_variance": round(ela_local_variance, 4),
         "texture_uniformity": round(texture_score, 4),
         "metadata_anomaly": round(meta_score, 4),
         "recompression_similarity": round(recomp_score, 4),
@@ -237,9 +246,8 @@ def analyze_image(file_path, filename, size_bytes):
     base = max(0.0, min(1.0, base + (lighting_score * 0.03 if face_weight else 0.0)))
 
     # ----------------------- Kaggle reference blend ------------------------ #
-    # Score the same features against the real-vs-fake distributions pulled
-    # from Kaggle (in-process profile, built once). Boosts the confidence of
-    # the heuristic verdict when the Kaggle reference agrees.
+    # Blend with the Kaggle reference profile when it agrees with the
+    # heuristic verdict - boosts confidence.
     kaggle_info = None
     try:
         from services.kaggle_reference import kaggle_reference
@@ -251,24 +259,39 @@ def analyze_image(file_path, filename, size_bytes):
     except Exception:  # noqa: BLE001
         kaggle_info = None
 
-    # ----------------------- Real AI providers blend ---------------------- #
-    # Gemini + local ViT add genuine signals on top of the heuristics. Any
-    # provider that is unavailable is skipped and the remaining weights are
-    # re-normalised inside blend_scores(), so heuristics stay as the fallback.
-    gemini = gemini_score("image", file_path=file_path)
-    local = local_score("image", file_path=file_path)
-    blended = blend_scores(base * 100, gemini, local)
-    base = max(0.0, min(1.0, blended / 100.0))
-    provider_note = score_reason(gemini, "image") + score_reason(local, "image")
+    # ------------------------- trained CNN signal -------------------------- #
+    # When a model has been trained (ml/train_cnn_kaggle.py) and deployed,
+    # blend its real fake-probability into the base and let the ensemble's
+    # "CNN" slot vote with the actual network output instead of a heuristic.
+    cnn_info = None
+    cnn_fake_pct = None
+    try:
+        from services.cnn_detector import cnn_detector
+        if cnn_detector.available():
+            cnn_info = cnn_detector.predict(file_path)
+            if cnn_info and cnn_info.get("fake_probability") is not None:
+                cnn_fake_pct = cnn_info["fake_probability"] * 100.0
+                base = max(0.0, min(1.0,
+                                    (1.0 - Config.IMAGE_CNN_WEIGHT) * base
+                                    + Config.IMAGE_CNN_WEIGHT * cnn_info["fake_probability"]))
+                features["cnn_ai_probability"] = round(cnn_info["fake_probability"], 4)
+    except Exception:  # noqa: BLE001
+        cnn_info = None
 
-    models, fake_probability = build_models("image", base * 100, filename, spread=4.0)
-    models = append_real_models(models, [
-        (gemini, f"Gemini ({Config.GEMINI_MODEL})"),
-        (local, "Local ViT (deepfake-vs-real)"),
-    ])
+    real_scores = {"CNN (EfficientNet)": cnn_fake_pct} if cnn_fake_pct is not None else None
+    models, fake_probability = build_models("image", base * 100, filename, spread=4.0,
+                                            real_scores=real_scores)
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
+    ai_origin = classify_ai_origin("image", features, fake_probability)
+    susp = suspicious_scale(fake_probability, ai_origin, features, "image")
     reasons = reasons_from_features("image", features, fake_probability)
+    if cnn_fake_pct is not None:
+        reasons.insert(0, {
+            "check": "Trained CNN (EfficientNet) forensic signal",
+            "passed": cnn_fake_pct < 50.0,
+            "detail": f"CNN fake probability {cnn_fake_pct:.1f}%",
+        })
     factors = {
         "metadata": 1.0 - meta_score,
         "ai_artifacts": 1.0 - ela_score,
@@ -277,7 +300,12 @@ def analyze_image(file_path, filename, size_bytes):
         "noise": 1.0 - texture_score,
     }
     trust = trust_score(fake_probability, factors)
-    explanation = explain_short("image", result, fake_probability) + provider_note
+    explanation = explain_short("image", result, fake_probability)
+    if ai_origin == "ai_manipulated":
+        explanation += (" The file appears to have been converted or edited using AI tools "
+                        "(localised artifacts detected), which raises the suspicion scale.")
+    elif ai_origin == "ai_generated":
+        explanation += " The content shows hallmarks of being generated entirely by AI."
     recommendations = _recommendations(result)
 
     elapsed = int((time.time() - start) * 1000)
@@ -286,6 +314,10 @@ def analyze_image(file_path, filename, size_bytes):
         "filename": filename,
         "result": result,
         "confidence": 100.0 - abs(fake_probability - (100 if result == "fake" else 0)),
+        "suspicious_scale": susp,
+        "ai_origin": ai_origin,
+        "ai_generated": ai_origin == "ai_generated",
+        "ai_manipulated": ai_origin == "ai_manipulated",
         "fake_probability": round(fake_probability, 1),
         "trust_score": trust,
         "risk_level": risk,
@@ -300,10 +332,10 @@ def analyze_image(file_path, filename, size_bytes):
         "file_hash": file_hash,
         "face_analysis": face,
         "heatmap_file": heatmap_name,
-        "model": "heuristic-vision-v1",
+        "model": "efficientnet-cnn-v1" if cnn_fake_pct is not None else "heuristic-vision-v1",
         "heatmap_available": True,
         "kaggle_reference": kaggle_info,
-        "ai_providers": {"gemini": gemini, "local": local},
+        "cnn_model": cnn_info,
         "verified": False,
     }
 

@@ -14,7 +14,6 @@ import {
   BeakerIcon,
   CloudArrowUpIcon,
   Cog6ToothIcon,
-  AcademicCapIcon,
 } from "@heroicons/react/24/outline";
 import ParticleBackground from "../components/ParticleBackground";
 import { useAuth } from "../context/AuthContext";
@@ -32,7 +31,7 @@ const features = [
     icon: PhotoIcon,
     title: "Image Deepfake Detection",
     desc: "CNN + Vision Transformer analysis with Error Level Analysis, metadata forensics and heatmap visualization to spot manipulated faces and edited pixels.",
-    color: "from-neon-blue to-cyan-400",
+    color: "accent-imgscan-dark from-neon-blue to-neon-cyan",
   },
   {
     icon: FilmIcon,
@@ -63,6 +62,8 @@ const workflow = [
   { icon: ShieldCheckIcon, title: "Report", desc: "Downloadable PDF/CSV report with QR verification, stored in history." },
 ];
 
+const smoothEase = [0.22, 1, 0.36, 1];
+
 export default function Home() {
   const { isAuthenticated } = useAuth();
   const { dark } = useTheme();
@@ -79,16 +80,17 @@ export default function Home() {
             <motion.span
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: smoothEase }}
               className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass text-xs font-medium mb-6"
             >
               <SparklesIcon className="w-4 h-4 text-neon-blue" />
-              Enterprise-Grade Deepfake Defense
+              Deepfake Detection You Can Actually Use
             </motion.span>
 
             <motion.h1
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
+              transition={{ delay: 0.1, duration: 0.6, ease: smoothEase }}
               className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight"
             >
               Detect <span className="neon-text">Deepfakes</span> Before They
@@ -98,18 +100,18 @@ export default function Home() {
             <motion.p
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.2, duration: 0.6, ease: smoothEase }}
               className="mt-6 text-lg text-slate-600 dark:text-slate-300"
             >
-              MariAnalysis uses deep learning to expose AI-generated images, cloned
-              voices, manipulated video and machine-written text — protecting
-              individuals and organizations from cybercrime.
+              MariAnalysis checks images, videos, audio and text for signs of
+              AI-generated or manipulated content — so you can tell what's real
+              from what isn't, before it causes problems.
             </motion.p>
 
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.3, duration: 0.6, ease: smoothEase }}
               className="mt-8 flex flex-wrap gap-4"
             >
               <Link to={isAuthenticated ? "/detect/image" : "/register"} className="btn-primary !px-8 !py-3.5 !text-base">
@@ -124,10 +126,10 @@ export default function Home() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.5, duration: 0.6, ease: smoothEase }}
               className="mt-6 font-mono text-xs text-slate-400 dark:text-slate-500 terminal-cursor"
             >
-              $ marianalysis scan --media image --model ensemble --explain yes
+              . marianalysis scan --media image --model ensemble --explain yes
             </motion.p>
           </div>
 
@@ -135,7 +137,7 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.25 }}
+            transition={{ delay: 0.25, duration: 0.6, ease: smoothEase }}
             className="relative"
           >
             <div className="glass-strong rounded-3xl p-6 relative">
@@ -149,19 +151,19 @@ export default function Home() {
 
               <div className="space-y-4 font-mono text-xs">
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">loading sample_video.mp4</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">extracting 48 frames…</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">faces detected: 2</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">temporal inconsistency: 0.83</span>
                 </div>
 
@@ -184,27 +186,12 @@ export default function Home() {
                 </div>
 
                 <div className="flex items-center gap-3 pt-1">
-                  <span className="text-neon-blue">$</span>
+                  <span className="text-neon-blue">.</span>
                   <span className="text-slate-600 dark:text-slate-300">report.pdf generated ✓</span>
                 </div>
               </div>
             </div>
 
-            <motion.div
-              animate={{ y: [0, -14, 0] }}
-              transition={{ duration: 5, repeat: Infinity }}
-              className="absolute -top-6 -right-4 glass-strong rounded-2xl p-4 shadow-glow"
-            >
-              <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center text-white">
-                  <AcademicCapIcon className="w-5 h-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-bold">Model Accuracy</p>
-                  <p className="text-neon-blue font-mono font-bold">98.7%</p>
-                </div>
-              </div>
-            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -218,7 +205,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
+              transition={{ delay: i * 0.1, duration: 0.6, ease: smoothEase }}
               className="text-center"
             >
               <p className="text-3xl sm:text-4xl font-extrabold neon-text">{s.value}</p>
@@ -236,8 +223,8 @@ export default function Home() {
               Everything You Need to <span className="neon-text">Verify Truth</span>
             </h2>
             <p className="text-slate-600 dark:text-slate-300">
-              A complete AI toolkit for detecting synthetic media across every format —
-              powered by computer vision, signal processing and NLP.
+              One place to check media across every format — using computer vision,
+              signal processing and text analysis together.
             </p>
           </div>
 
@@ -248,8 +235,8 @@ export default function Home() {
                 initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                whileHover={{ y: -6 }}
+                transition={{ delay: i * 0.1, duration: 0.6, ease: smoothEase }}
+                whileHover={{ y: -6, transition: { duration: 0.3, ease: smoothEase } }}
                 className="glass rounded-2xl p-6 group relative overflow-hidden"
               >
                 <div className="scan-overlay opacity-0 group-hover:opacity-100" />
@@ -272,7 +259,7 @@ export default function Home() {
               The <span className="neon-text">AI Workflow</span>
             </h2>
             <p className="text-slate-600 dark:text-slate-300">
-              From raw upload to forensic report in six transparent stages.
+              From upload to report — six steps, no black boxes.
             </p>
           </div>
 
@@ -283,7 +270,7 @@ export default function Home() {
                 initial={{ opacity: 0, x: -20 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
+                transition={{ delay: i * 0.1, duration: 0.6, ease: smoothEase }}
                 className="relative glass rounded-2xl p-6"
               >
                 <span className="absolute top-4 right-5 font-mono text-3xl font-black text-slate-200 dark:text-white/5">
@@ -302,11 +289,12 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            transition={{ duration: 0.6, ease: smoothEase }}
             className="mt-12 text-center"
           >
             <Link to={isAuthenticated ? "/dashboard" : "/register"} className="btn-primary !px-10 !py-4 !text-lg">
               <ShieldCheckIcon className="w-6 h-6" />
-              Start Securing Today
+              Get Started
             </Link>
           </motion.div>
         </div>

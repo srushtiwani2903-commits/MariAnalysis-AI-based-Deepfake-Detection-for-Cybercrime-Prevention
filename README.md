@@ -1,15 +1,15 @@
-# MariAnalysis — AI-Based Deepfake Detection for Cybercrime Prevention
+# MariAnalysis
 
-A production-grade, full-stack cybersecurity platform that detects AI-generated /
-manipulated content across **images, videos, audio, and text**. It returns
-confidence scores, explainable (XAI) verdicts, forensic PDF/CSV reports, and a
-learning center for deepfake awareness.
+A full-stack project that checks **images, videos, audio, and text** for signs of
+being AI-generated or manipulated. Each scan returns a confidence score, an
+explanation of *why* the verdict was reached, and a downloadable PDF/CSV report.
+There's also a learning center for getting familiar with deepfake threats.
 
-> **Runs out of the box with smart heuristic AI predictions** (no model weights).
-> Deepfake analysis runs on deterministic, explainable heuristic engines for
-> images, video, audio and text. Model *training* code has been removed; the
-> Kaggle subsystem exists purely as an on-demand dataset fetch/extract/use
-> pipeline and never persists data in the project.
+> **Works right away using deterministic heuristic engines** (no model weights
+> needed). Optionally, a PyTorch CNN trained on Kaggle GPUs
+> (`backend/ml/train_cnn_kaggle.py`) can be blended into image verdicts; the
+> Kaggle subsystem fetches datasets on demand into a temp cache and never
+> persists them in the project.
 
 ---
 
@@ -19,7 +19,7 @@ learning center for deepfake awareness.
 - **Authentication** — register, login, forgot password, JWT, PBKDF2 password hashing, email validation
 - **Dashboard** — total scans, fake/real counts, accuracy, recent uploads, quick actions
 - **4 Detection modules**
-  - Image — Error Level Analysis + CNN/ViT hooks + metadata forensics + heatmap data
+  - Image — Error Level Analysis + trained CNN (EfficientNet transfer learning) + metadata forensics + heatmap data
   - Video — frame extraction, MediaPipe/Haar face detection, temporal analysis, timeline
   - Audio — Librosa spectrogram, spectral flatness, MFCC variance, voice-clone checks
   - Text — perplexity, burstiness, repetition + suspicious sentence highlighting
@@ -27,7 +27,9 @@ learning center for deepfake awareness.
   (`POST /api/detect/url`), no manual download needed
 - **Automated Kaggle data pipeline** — deepfake datasets are fetched **directly from
   Kaggle on-demand**, extracted to a temp cache, used, then the temp cache is
-  auto-deleted. Nothing is stored in the project. No model training is performed.
+  auto-deleted. Nothing is stored in the project. Model training runs as a Kaggle
+  notebook (`backend/ml/train_cnn_kaggle.py`); the trained weights are the only
+  artifact copied back into `backend/models/`.
 - **Results page** — Authentic/Fake badge, confidence meter, risk level, XAI explanation, feature importances, recommendations, PDF/CSV/QR downloads
 - **Multi-model ensemble** — per-model verdict table (CNN / Transformer / CLIP / Audio / N-gram) plus a 0-100 evidence trust score on every result
 - **Explainable AI checklist** — pass/fail detection reasons (metadata, ELA, compression, noise, face consistency, network age…) shown on results and in the PDF
@@ -77,9 +79,11 @@ deepfake-detection/
 │   ├── requirements-ai.txt       # Optional AI/model dependencies
 │   ├── smoke_test.py             # End-to-end API test (39 checks)
 │   ├── .env.example              # Environment variables template
-│   ├── ml/                       # Kaggle data subsystem (no model training)
+│   ├── ml/                       # Kaggle data subsystem + CNN training
 │   │   ├── data_config.py        # Dataset registry (Kaggle slugs per media type)
 │   │   ├── kaggle_pipeline.py    # On-demand Kaggle fetch (temp cache, auto-clean)
+│   │   ├── train_cnn_kaggle.py   # Kaggle notebook: real-vs-fake CNN training
+│   ├── models/                   # Trained weights (gitignored, .gitkeep only)
 │   ├── routes/
 │   │   ├── auth.py               # /api/auth/*        (register, login, profile)
 │   │   ├── detection.py          # /api/detect/*      (image, video, audio, text, email, social, realtime, url)
@@ -93,6 +97,7 @@ deepfake-detection/
 │   ├── services/
 │   │   ├── ai_service.py         # Orchestrator (heuristic engines + ensemble)
 │   │   ├── ensemble.py           # Multi-model verdicts, trust score, XAI reasons
+│   │   ├── cnn_detector.py       # Optional trained-CNN inference (lazy load)
 │   │   ├── blockchain.py         # SHA-256 evidence ledger + verification
 │   │   ├── analyze_image.py      # ELA + metadata heuristics + heatmap
 │   │   ├── analyze_video.py      # frame + face + temporal heuristics
@@ -159,11 +164,18 @@ pip install -r requirements-ai.txt
 copy .env.example .env                   # Windows
 # cp .env.example .env                   # macOS / Linux
 
-python run.py                            # starts on http://localhost:5000
+python run.py                            # starts on http://localhost:5001
 ```
 
 The first run auto-creates the SQLite database and a default admin account
-(configured in `.env`, default `admin@marianalysis.local` / `Admin@12345`).
+(`admin@marianalysis.local` / the password you set). Since 2026-08 the
+backend keeps every secret — `SECRET_KEY`, `JWT_SECRET_KEY`, `ADMIN_PASSWORD`,
+Kaggle/Gemini/MSG91/SMTP credentials — in an **encrypted vault** at
+`backend/security/secrets.vault` (Fernet + SHA-256, guarded by
+`backend/security/master.key`, both gitignored). On first boot the vault
+auto-seeds itself and migrates any values already present in `.env`; a missing
+`ADMIN_PASSWORD` is generated and written to
+`backend/security/ADMIN_CREDENTIALS.txt` once.
 
 ### 2) Frontend
 
@@ -173,7 +185,7 @@ npm install
 npm start                                # starts on http://localhost:3000
 ```
 
-> The frontend proxies `/api` to `http://localhost:5000` during development.
+> The frontend proxies `/api` to `http://localhost:5001` during development.
 > For production set `REACT_APP_API_URL` (see `.env.example`).
 
 ### 3) Auto-start on every login (one-time, per machine)
@@ -194,13 +206,15 @@ powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
 
 ## 🔌 API Endpoints (summary)
 
-Base URL: `http://localhost:5000/api` — all protected endpoints require
-`Authorization: Bearer <token>`.
+Base URL: `http://localhost:5001/api`. The **web app** authenticates with an
+HttpOnly, Secure, SameSite=Strict session cookie (never readable from JS or
+localStorage). API/script clients get the JWT in the JSON response body and
+send `Authorization: Bearer <token>`.
 
 | Method | Endpoint                       | Description                          |
 |--------|--------------------------------|--------------------------------------|
-| POST   | `/auth/register`               | Create account (returns JWT)         |
-| POST   | `/auth/login`                  | Login (returns JWT)                  |
+| POST   | `/auth/register`               | Create account (sets session cookie) |
+| POST   | `/auth/login`                  | Login (sets session cookie)          |
 | POST   | `/auth/forgot-password`        | Request password reset               |
 | POST   | `/auth/reset-password`         | Set new password                     |
 | GET    | `/auth/me`                     | Current user profile                 |
@@ -249,9 +263,9 @@ Interactive API docs are also rendered in the app at `/docs`.
 ## 🧠 Deepfake Analysis & the Kaggle Data Pipeline
 
 The app ships with deterministic heuristic engines so the full pipeline works
-out of the box with zero model weights. Model *training* was intentionally
-removed — the Kaggle subsystem is used only to fetch/extract/use datasets
-on-demand for research and validation.
+out of the box with zero model weights. An optional trained CNN upgrades the
+image module: train it on Kaggle GPUs, copy the checkpoint into
+`backend/models/`, and set `MODEL_ENABLED=true`.
 
 ### 1) Configure Kaggle credentials (once)
 
@@ -307,28 +321,30 @@ reported in every result as `kaggle_reference` / `kaggle_reference_status`.
 
 Add your own via `KAGGLE_EXTRA_DATASETS=user/dataset1,user/dataset2` in `.env`.
 
-### Train real models on Kaggle's GPU cloud (no local download)
+### Optional trained CNN for images (accuracy boost)
 
-Instead of downloading datasets, the app can push a training notebook to
-Kaggle and let the dataset be mounted **on Kaggle's own machine**:
+Train the real-vs-fake face detector on Kaggle with `backend/ml/train_cnn_kaggle.py`
+(EfficientNet transfer learning, mixed precision, early stopping):
 
-1. `POST /api/model/train` with `{"media": "image"}` (admin) → pushes
-   `backend/ml/trainers/<media>_trainer.py` as a private Kaggle kernel.
-2. Kaggle mounts the dataset via kagglehub on its cloud, trains on GPU, and
-   computes a holdout test accuracy inside the notebook.
-3. The app polls the kernel and pulls back **only the trained weights**
-   (`model.pth` / `model.pkl` + `model_info.json`) into `backend/models/<media>/`.
-   No dataset is ever stored in the project.
+```bash
+# 1) Upload ml/train_cnn_kaggle.py to Kaggle -> GPU (T4x2) -> Run all.
+# 2) Download marianalysis_cnn.pt from the notebook Output tab.
+# 3) Copy it into the project:
+cp marianalysis_cnn.pt backend/models/faces_real_vs_fake_cnn.pt   # macOS/Linux
+copy marianalysis_cnn.pt backend\models\faces_real_vs_fake_cnn.pt # Windows
 
-Endpoints (admin): `POST /api/model/train`, `GET /api/model/train/<media>`,
-`POST /api/model/train/<media>/download`, `GET /api/model/weights`,
-`GET /api/model/health`.
+# 4) Enable it:
+#    backend/.env  ->  MODEL_ENABLED=true
+```
 
-Requires the `kaggle` client + credentials:
-`pip install -r requirements.txt -r requirements-ai.txt`, then set
-`KAGGLE_USERNAME` / `KAGGLE_KEY` in `backend/.env`.
+When enabled, `backend/services/cnn_detector.py` loads the checkpoint once
+(thread-safe) and every image scan blends the CNN's fake probability
+(`IMAGE_CNN_WEIGHT`, default 0.45) with the heuristic engines. The ensemble's
+"CNN (EfficientNet)" slot votes with the real network output, and results carry
+a `cnn_model` payload (fake probability, confidence, per-class probabilities,
+latency). Without the weights the app degrades silently to heuristics-only.
 
-### How the heuristic engines work (no model weights needed)
+### How the heuristic engines work
 
 - **Image**: Error Level Analysis (recompression artifacts), pHash-based
   similarity, color/texture statistics, EXIF forensics.
@@ -338,6 +354,10 @@ Requires the `kaggle` client + credentials:
   RIFF header fallback.
 - **Text**: n-gram perplexity proxy, sentence-length burstiness, repetition
   ratio.
+
+The heuristics are CPU-only — no GPU or model hosting required. The optional
+CNN runs in <100ms on CPU per image (EfficientNet-B0 @ 224px), so it stays
+lightweight even without a GPU.
 
 ---
 
@@ -360,7 +380,14 @@ requirements.txt).
 ## 🔒 Security Model
 
 - **Passwords**: PBKDF2 via `werkzeug.security` — never stored in plain text.
-- **Auth**: short-lived JWT access tokens (no cookies ⇒ no CSRF surface).
+- **Secrets**: `SECRET_KEY`, `JWT_SECRET_KEY`, `ADMIN_PASSWORD` and third-party
+  API keys live in an encrypted vault (`security/secrets.vault`, Fernet + SHA-256)
+  — never in source control or plaintext `.env`; the master key is gitignored.
+- **Auth**: short-lived JWT access tokens in an **HttpOnly, Secure,
+  SameSite=Strict cookie** — JavaScript can never read the token, so XSS can't
+  steal sessions. The token is not returned to the browser in JSON responses.
+  State-changing cookie-authenticated requests require a double-submit CSRF
+  token (`X-CSRF-TOKEN`), so cross-site requests cannot drive the API.
 - **IDPS (Intrusion Detection & Prevention)**: fail2ban-style per-IP lockout —
   5 failed logins in a window auto-bans the IP; bans + every data
   create/update/delete are written to the DB `logs` table **and** append-only
@@ -387,7 +414,7 @@ requirements.txt).
 # build backend with AI deps included
 docker compose build --build-arg INSTALL_AI_DEPS=1
 docker compose up -d
-# backend  -> http://localhost:5000
+# backend  -> http://localhost:5001
 # frontend -> http://localhost:3000
 ```
 
@@ -411,8 +438,10 @@ pip install -r requirements.txt
 gunicorn -w 4 -b 0.0.0.0:$PORT app:app
 ```
 
-Set env vars: `SECRET_KEY`, `JWT_SECRET_KEY`, `DATABASE_URL`,
-`CORS_ORIGINS=https://<frontend>.vercel.app`.
+Set env vars: `DATABASE_URL`, `CORS_ORIGINS=https://<frontend>.vercel.app`,
+and the vault master key `SECRETS_MASTER_KEY` (the vault file
+`backend/security/secrets.vault` must be copied to the host; it is gitignored).
+Set `JWT_COOKIE_SECURE=true` (HTTPS required for the cookie to be sent).
 
 ### Database hosting
 

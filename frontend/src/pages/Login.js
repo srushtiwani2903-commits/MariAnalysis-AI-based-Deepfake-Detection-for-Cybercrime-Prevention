@@ -47,7 +47,7 @@ export default function Login() {
             <ShieldExclamationIcon className="w-8 h-8" />
           </span>
           <h1 className="text-2xl font-bold">Welcome Back</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Sign in to continue scanning</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Good to see you again. Log in to get scanning.</p>
         </div>
 
         {notice && (

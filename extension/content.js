@@ -21,7 +21,7 @@
         positionBadge(img, badge);
         badge.addEventListener("click", (e) => {
           e.stopPropagation();
-          window.open(`https://localhost:5000/docs`, "_blank");
+          window.open(`https://localhost:5001/docs`, "_blank");
         });
       }
     }

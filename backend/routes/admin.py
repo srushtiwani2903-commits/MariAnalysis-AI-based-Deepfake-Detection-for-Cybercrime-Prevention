@@ -1,6 +1,6 @@
 """Admin endpoints: system stats, user management, logs, model health.
 
-Access is gated by the `admin_required` decorator (JWT + is_admin flag).
+All routes require the admin_required decorator (JWT + is_admin flag).
 """
 from datetime import datetime, timezone
 

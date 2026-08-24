@@ -31,8 +31,17 @@ backend/reports/*
 !backend/uploads/.gitkeep
 !backend/reports/.gitkeep
 backend/security/logs/*
+# Encrypted secret vault + its master key + bootstrap note (never commit!)
+backend/security/secrets.vault
+backend/security/master.key
+backend/security/ADMIN_CREDENTIALS.txt
 backend/ml/*.json
-backend/models/*
+# Trained model weights (reproducible from Kaggle; only the deployed model is tracked)
+backend/models/*.pt
+backend/models/*.pth
+backend/models/*.onnx
+!backend/models/faces_real_vs_fake_cnn.pt
+!backend/models/.gitkeep
 
 # ---------- Logs / OS ----------
 *.log

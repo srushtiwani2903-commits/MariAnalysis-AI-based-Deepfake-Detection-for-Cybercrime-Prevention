@@ -15,11 +15,11 @@ export default function Footer() {
             <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center text-white">
               <ShieldCheckIcon className="w-4 h-4" />
             </span>
-            <span className="font-bold">Mari<span className="neon-text">Analysis</span></span>
+            <span className="font-bold whitespace-nowrap">Mari<span className="neon-text">Analysis</span></span>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            AI-powered deepfake detection platform fighting cybercrime by exposing
-            manipulated images, videos, audio and text.
+            Helps you check images, videos, audio and text for signs of being
+            AI-generated or manipulated — before you trust them.
           </p>
         </div>
 
@@ -60,7 +60,7 @@ export default function Footer() {
       </div>
       <div className="border-t border-slate-200 dark:border-white/10 py-4">
         <p className="text-center text-xs text-slate-500 dark:text-slate-500">
-          © {new Date().getFullYear()} MariAnalysis · AI-Based Deepfake Detection for Cybercrime Prevention · Made with security in mind
+          © {new Date().getFullYear()} MariAnalysis · Built to help you spot the fakes
         </p>
       </div>
     </footer>

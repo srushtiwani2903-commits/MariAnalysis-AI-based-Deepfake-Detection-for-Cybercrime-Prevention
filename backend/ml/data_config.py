@@ -1,12 +1,9 @@
-﻿"""Dataset registry for the on-demand Kaggle data pipeline.
+﻿"""Registry mapping Kaggle dataset slugs to media types.
 
-Each entry maps a Kaggle dataset slug to a media type. The pipeline fetches
-each dataset directly from Kaggle (temp cache) ONLY when the corresponding
-training script runs - data is never stored in the project.
-
-When a Kaggle dataset is required (non-optional) but cannot be downloaded
-(for example, gated / requires acceptance), set ``required=False`` so the
-pipeline logs a warning instead of aborting.
+The pipeline pulls a dataset straight from Kaggle (temp cache) only when the
+matching training script runs - nothing is stored in the project. Set
+``required=False`` on a gated/acceptance-only dataset so the pipeline warns
+instead of aborting when it can't be downloaded.
 """
 import os
 

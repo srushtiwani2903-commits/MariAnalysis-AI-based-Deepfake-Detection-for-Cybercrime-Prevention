@@ -1,9 +1,7 @@
-"""Authentication endpoints: register, login, forgot/reset password, profile.
+"""Authentication endpoints: register, login, password reset, profile.
 
-Security:
-  - Passwords hashed with werkzeug (PBKDF2) - never stored in plain text.
-  - JWT access tokens (flask-jwt-extended) with expiry.
-  - Email regex validation, password strength rules, rate limiting.
+Passwords are hashed with werkzeug, sessions use expiring JWTs, and inputs are
+validated (email regex, password strength) and rate-limited.
 """
 import queue
 import re
@@ -13,7 +11,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from flask import Blueprint, Response, jsonify, request
-from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, jwt_required
+from flask_jwt_extended import (create_access_token, get_jwt, get_jwt_identity,
+                                jwt_required, set_access_cookies, unset_jwt_cookies)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import Config
@@ -92,8 +91,26 @@ def _issue_session(user):
     return create_access_token(identity=str(user.id), additional_claims={"jti": jti})
 
 
-# --- In-memory pub/sub so other devices are logged out the instant this
-# user signs in somewhere else (Server-Sent Events). ---
+def _browser_request():
+    """True for SPA requests (axios sets this header). The JWT then lives only
+    in an HttpOnly cookie; non-browser/curl clients get it in the JSON body so
+    the API docs and tooling can still use ``Authorization: Bearer``."""
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def _session_response(data, token, status=200):
+    """Attach the JWT to the response via an HttpOnly cookie. The raw token is
+    only added to the JSON body for non-browser clients."""
+    if not _browser_request() and token:
+        data["token"] = token
+    resp = jsonify(data)
+    if token:
+        set_access_cookies(resp, token)
+    return resp, status
+
+
+# In-memory pub/sub: tells other devices to log out the instant this user
+# signs in elsewhere (Server-Sent Events).
 _EVENTS = {}            # user_id -> set[queue.Queue]
 _EVENTS_LOCK = threading.Lock()
 
@@ -200,11 +217,8 @@ def register():
     # No OTP gate for now - the account is active immediately and the user is
     # logged straight in. (Phone OTP/email verification removed for now.)
     token = _issue_session(user)
-    return jsonify({
-        "message": "Account created. Welcome!",
-        "token": token,
-        "user": user.to_dict(),
-    }), 201
+    return _session_response(
+        {"message": "Account created. Welcome!", "user": user.to_dict()}, token, 201)
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -231,9 +245,9 @@ def login():
     # OTP/email verification gate is removed for now - any registered account
     # can log in (by email, username or phone) immediately.
 
-    # Single-session rule: this login becomes the ONLY active session. Every
-    # other active session is revoked on the spot and those devices are told
-    # (via SSE) to log out immediately - no refresh or manual logout needed.
+    # Single-session rule: this login is the only active session. Any other
+    # active session is revoked immediately and those devices are told via SSE
+    # to log out on the spot - no refresh or manual logout needed.
     if _active_sessions(user.id):
         ActiveSession.query.filter_by(user_id=user.id, is_active=True).update(
             {"is_active": False, "revoked_reason": "superseded"})
@@ -248,7 +262,8 @@ def login():
     audit("login", user.username, "User", user.id, request.remote_addr, "Successful login")
 
     token = _issue_session(user)
-    return jsonify({"message": "Login successful.", "token": token, "user": user.to_dict()})
+    return _session_response(
+        {"message": "Login successful.", "user": user.to_dict()}, token)
 
 
 @auth_bp.route("/forgot-password", methods=["POST"])
@@ -342,7 +357,9 @@ def logout():
         ActiveSession.query.filter_by(jti=jti).update(
             {"is_active": False, "revoked_reason": "logout"})
         db.session.commit()
-    return jsonify({"message": "Logged out."})
+    resp = jsonify({"message": "Logged out."})
+    unset_jwt_cookies(resp)
+    return resp
 
 
 @auth_bp.route("/profile", methods=["PUT"])
@@ -402,7 +419,8 @@ def verify_email():
 
     active = _active_sessions(user.id)
     token = _issue_session(user) if not active else None
-    return jsonify({"message": "Email verified. Welcome!", "token": token, "user": user.to_dict()})
+    return _session_response(
+        {"message": "Email verified. Welcome!", "user": user.to_dict()}, token)
 
 
 @auth_bp.route("/verify-phone", methods=["POST"])
@@ -432,8 +450,9 @@ def verify_phone():
 
     active = _active_sessions(user.id)
     token = _issue_session(user) if not active else None
-    return jsonify({"message": "Phone number verified. You can now log in with it.",
-                    "token": token, "user": user.to_dict()})
+    return _session_response(
+        {"message": "Phone number verified. You can now log in with it.",
+         "user": user.to_dict()}, token)
 
 
 @auth_bp.route("/resend-otp", methods=["POST"])

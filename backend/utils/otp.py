@@ -1,11 +1,8 @@
-"""OTP generation, issuing and verification for email + phone.
+"""Email + phone OTP generation, issuing and verification.
 
-Email OTPs are delivered through utils.mailer (SMTP when configured, else
-logged). Phone OTPs go through MSG91 SMS when configured (MSG91_AUTHKEY +
-MSG91_TEMPLATE_ID in .env), otherwise they are logged to
-security/logs/otp_phone.log so local/dev builds still work.
-
-OTP is stored hashed (never plain text) with an expiry and a max-attempts cap.
+Email OTPs go through utils.mailer and phone OTPs through MSG91 when
+configured, otherwise they're logged for local testing. Stored hashed (never
+plain text) with an expiry and a max-attempts cap.
 """
 import hashlib
 import logging

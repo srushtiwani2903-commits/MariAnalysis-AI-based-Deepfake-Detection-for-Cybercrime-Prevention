@@ -23,7 +23,7 @@ content using the MariAnalysis backend.
 - Or open the popup, paste an image URL and click **Analyze Image**.
 
 ## Notes
-- The extension talks to `http://localhost:5000/api/extend/analyze`.
+- The extension talks to `http://localhost:5001/api/extend/analyze`.
   To point it at another host, edit `API_URL` in `background.js` and `popup.js`
   and add the host to `host_permissions` in `manifest.json`.
 - API keys are stored locally in `chrome.storage.local` and never leave the device.

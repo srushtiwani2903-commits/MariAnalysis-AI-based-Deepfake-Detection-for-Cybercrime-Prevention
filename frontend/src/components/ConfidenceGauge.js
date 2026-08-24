@@ -30,7 +30,7 @@ export default function ConfidenceGauge({ value, label = "Confidence" }) {
             strokeDasharray={`${(v / 100) * 251.3} 251.3`} />
           {/* Needle */}
           <motion.g initial={{ rotate: -90 }} animate={{ rotate: angle }}
-            transition={{ duration: 1, ease: "easeOut" }}
+            transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
             style={{ transformOrigin: "100px 110px" }}>
             <line x1="100" y1="110" x2="100" y2="40" stroke={color}
               strokeWidth="3" strokeLinecap="round" />

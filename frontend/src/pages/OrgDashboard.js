@@ -49,7 +49,7 @@ export default function OrgDashboard() {
           <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-purple to-fuchsia-500 text-white mb-3 inline-flex">
             <BuildingOffice2Icon className="w-7 h-7" />
           </span>
-          <h1 className="text-3xl font-bold">Organisation Threat Dashboard</h1>
+          <h1 className="text-3xl font-bold">Threat Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
             {data ? (data.scope === "global" ? "Global overview (admin)" : "Your organisation's activity") : "Loading…"}
           </p>
@@ -65,12 +65,12 @@ export default function OrgDashboard() {
         </div>
       )}
 
-      {!data && !error && <div className="text-center py-16 text-slate-400 animate-pulse">Gathering threat intelligence…</div>}
+      {!data && !error && <div className="text-center py-16 text-slate-400 animate-pulse">Loading overview…</div>}
 
       {data && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <StatCard icon={ArrowUpTrayIcon} label="Scans Today" value={data.today_uploads} color="from-neon-blue to-cyan-400" delay={0} />
+            <StatCard icon={ArrowUpTrayIcon} label="Scans Today" value={data.today_uploads} color="from-neon-blue to-neon-cyan" delay={0} />
             <StatCard icon={ExclamationTriangleIcon} label="Deepfakes Detected" value={data.fake_detected} color="from-rose-500 to-pink-500" delay={0.05} />
             <StatCard icon={CheckCircleIcon} label="Authentic" value={data.real_detected} color="from-emerald-400 to-teal-500" delay={0.1} />
             <StatCard icon={ClockIcon} label="Pending Review" value={data.pending_review} color="from-amber-400 to-orange-500" delay={0.15} />

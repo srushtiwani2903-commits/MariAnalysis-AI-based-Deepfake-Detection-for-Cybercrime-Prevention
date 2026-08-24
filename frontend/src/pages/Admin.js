@@ -56,8 +56,8 @@ export default function Admin() {
   };
 
   const statCards = [
-    ["Total Users", stats?.total_users, "from-neon-blue to-cyan-400", UsersIcon],
-    ["Total Scans", stats?.total_scans, "from-neon-purple to-fuchsia-500", DocumentMagnifyingGlassIcon],
+    ["Total Users", stats?.total_users, "from-neon-blue to-neon-cyan", UsersIcon],
+    ["Total Scans", stats?.total_scans, "accent-g-forest accent-total-red", DocumentMagnifyingGlassIcon],
     ["Fake Detected", stats?.fake_detected, "from-rose-500 to-red-500", ShieldExclamationIcon],
     ["Real Detected", stats?.real_detected, "from-emerald-500 to-green-500", ShieldCheckIcon],
     ["Scans Today", stats?.scans_today, "from-amber-400 to-orange-500", ServerIcon],
