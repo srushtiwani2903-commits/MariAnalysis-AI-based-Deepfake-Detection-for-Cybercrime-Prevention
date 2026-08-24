@@ -94,7 +94,8 @@ if ($ahead -gt 0) {
 
 if (-not $pulled -and -not $pushed) { Log "up to date"; Pop-Location; exit }
 
-$changed = git diff --name-only $before..HEAD
+$changed = @()
+if ($pulled) { $changed = git diff --name-only "${before}..HEAD" }
 
 if ($changed -match 'requirements') {
     Log "requirements changed - reinstalling backend deps"
