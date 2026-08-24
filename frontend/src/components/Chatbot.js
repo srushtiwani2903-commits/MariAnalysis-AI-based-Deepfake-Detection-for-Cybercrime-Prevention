@@ -1,27 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChatBubbleLeftRightIcon, XMarkIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import api from "../api/api";
+import ChatbotAvatar from "./ChatbotAvatar";
 
 const QUICK = ["What is a deepfake?", "How does the detection work?", "Can it scan videos?", "How to report fraud?"];
 
-// Floating assistant chat widget.
+const ALERT_WORDS = ["scam", "fraud", "hack", "stolen", "danger", "risk", "phish", "blackmail", "crime", "complaint", "report", "fake", "threat", "unsafe", "virus"];
+const HAPPY_WORDS = ["thanks", "thank", "great", "awesome", "nice", "hi", "hello", "hey", "good", "cool"];
+const SURPRISED_WORDS = ["really", "wow", "seriously", "amazing", "unbelievable"];
+
+function moodFromQuestion(q) {
+  const t = q.toLowerCase();
+  if (ALERT_WORDS.some((w) => t.includes(w))) return "alert";
+  if (SURPRISED_WORDS.some((w) => t.includes(w))) return "surprised";
+  if (HAPPY_WORDS.some((w) => t.includes(w))) return "happy";
+  return null;
+}
+
 export default function Chatbot() {
   const [open, setOpen] = useState(false);
+  const [mood, setMood] = useState("idle");
   const [messages, setMessages] = useState([
     { role: "ai", text: "Hi! I can help you understand deepfakes, how detection works, or how to report fraud. What do you want to know?" },
   ]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const listRef = useRef(null);
+  const moodTimer = useRef(null);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
+  useEffect(() => () => clearTimeout(moodTimer.current), []);
+
+  const setMoodTemporarily = (m, ms = 4000) => {
+    setMood(m);
+    clearTimeout(moodTimer.current);
+    moodTimer.current = setTimeout(() => setMood("idle"), ms);
+  };
+
   const send = async (text) => {
     const q = (text ?? input).trim();
     if (!q || typing) return;
+    const detected = moodFromQuestion(q);
+    if (detected) setMood(detected);
     const history = messages.slice(-10).map((m) => ({ role: m.role, text: m.text }));
     setMessages((m) => [...m, { role: "user", text: q }]);
     setInput("");
@@ -29,8 +53,10 @@ export default function Chatbot() {
     try {
       const { data } = await api.post("/chat", { message: q, history });
       setMessages((m) => [...m, { role: "ai", text: data.reply || "Sorry, I couldn't parse that." }]);
+      setMoodTemporarily(detected || (data.intent === "gemini" ? "happy" : "thinking"));
     } catch {
       setMessages((m) => [...m, { role: "ai", text: "I'm having trouble connecting. Please try again." }]);
+      setMoodTemporarily("alert");
     } finally {
       setTyping(false);
     }
@@ -48,7 +74,7 @@ export default function Chatbot() {
           >
             <div className="accent-g-moss bg-gradient-to-r from-neon-blue to-neon-purple px-4 py-3 flex items-center justify-between text-white">
               <div className="flex items-center gap-2">
-                <ChatBubbleLeftRightIcon className="w-5 h-5" />
+                <ChatbotAvatar mood={typing ? "thinking" : mood} size={26} />
                 <span className="font-bold text-sm">DeepGuard Assistant</span>
               </div>
               <button onClick={() => setOpen(false)} aria-label="Close chat">
@@ -107,7 +133,7 @@ export default function Chatbot() {
         aria-label="Toggle assistant"
         className="accent-g-moss fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple text-white shadow-xl shadow-neon-purple/30 flex items-center justify-center"
       >
-        {open ? <XMarkIcon className="w-6 h-6" /> : <ChatBubbleLeftRightIcon className="w-6 h-6" />}
+        {open ? <XMarkIcon className="w-6 h-6" /> : <ChatbotAvatar mood={mood} size={38} />}
       </motion.button>
     </>
   );
