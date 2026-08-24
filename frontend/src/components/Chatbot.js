@@ -82,19 +82,37 @@ export default function Chatbot() {
               </button>
             </div>
             <div ref={listRef} className="h-80 overflow-y-auto p-3 space-y-3 bg-slate-50 dark:bg-slate-900/80">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
-                    m.role === "user"
-                      ? "accent-g-moss bg-gradient-to-br from-neon-blue to-neon-purple text-white rounded-br-sm"
-                      : "glass rounded-bl-sm"
-                  }`}>
-                    {m.text}
+              {messages.map((m, i) => {
+                const isAI = m.role === "ai";
+                const showAvatar = isAI && messages[i - 1]?.role !== "ai";
+                return (
+                  <div key={i} className={`flex ${isAI ? "justify-start" : "justify-end"}`}>
+                    {isAI && (
+                      <div className="w-7 shrink-0 self-start pt-0.5 flex justify-center">
+                        {showAvatar && (
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-blue/30 to-neon-purple/30 ring-1 ring-neon-purple/40 overflow-hidden flex items-end justify-center">
+                            <ChatbotAvatar size={26} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                      !isAI
+                        ? "accent-g-moss bg-gradient-to-br from-neon-blue to-neon-purple text-white rounded-br-sm"
+                        : "glass rounded-bl-sm"
+                    }`}>
+                      {m.text}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {typing && (
                 <div className="flex justify-start">
+                  <div className="w-7 shrink-0 self-start pt-0.5 flex justify-center">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-blue/30 to-neon-purple/30 ring-1 ring-neon-purple/40 overflow-hidden flex items-end justify-center">
+                      <ChatbotAvatar mood="thinking" size={26} />
+                    </div>
+                  </div>
                   <div className="glass rounded-2xl px-3 py-2 text-sm text-slate-400 animate-pulse">Thinking…</div>
                 </div>
               )}
