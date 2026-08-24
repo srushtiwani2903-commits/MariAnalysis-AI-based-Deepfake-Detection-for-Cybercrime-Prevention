@@ -29,8 +29,10 @@ _gemini_blocked_until = {}
 
 # Free-tier daily limits differ per model; when one runs out, try the next.
 _GEMINI_MODELS = [
-    Config.GEMINI_MODEL or "gemini-2.5-flash-lite",
-    "gemini-2.5-flash-lite",
+    Config.GEMINI_MODEL or "gemini-flash-lite-latest",
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
     "gemini-flash-latest",
 ]
 
