@@ -22,9 +22,17 @@ chat_bp = Blueprint("chat", __name__)
 
 _log = logging.getLogger("chat.gemini")
 
-# Skip Gemini for a while after a quota/auth error so the assistant answers
-# fast (via the fallback) instead of waiting on the API every time.
-_gemini_blocked_until = 0.0
+# Skip a model for a while after a quota/auth error so the assistant answers
+# fast (via another model or the fallback) instead of waiting every time.
+# Per-model so one exhausted quota never disables the whole assistant.
+_gemini_blocked_until = {}
+
+# Free-tier daily limits differ per model; when one runs out, try the next.
+_GEMINI_MODELS = [
+    Config.GEMINI_MODEL or "gemini-2.5-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
+]
 
 # (keywords, intent, reply)
 _KB = [
@@ -117,16 +125,29 @@ _ROLE_MAP = {"ai": "model", "assistant": "model", "model": "model", "user": "use
 
 
 def _ask_gemini(contents):
-    """Call the Gemini generateContent REST API. Returns reply text or None."""
-    global _gemini_blocked_until
+    """Call the Gemini generateContent REST API. Returns reply text or None.
+
+    Tries the configured model first, then free-tier alternates, so a daily
+    quota outage on one model transparently falls through to the next.
+    """
     if not Config.GEMINI_API_KEY:
         return None
     now = time.time()
-    if now < _gemini_blocked_until:
-        return None
+    tried = set()
+    for model in _GEMINI_MODELS:
+        if model in tried or now < _gemini_blocked_until.get(model, 0):
+            continue
+        tried.add(model)
+        text = _ask_gemini_model(model, contents)
+        if text:
+            return text
+    return None
+
+
+def _ask_gemini_model(model, contents):
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{Config.GEMINI_MODEL}:generateContent?key={Config.GEMINI_API_KEY}"
+        f"{model}:generateContent?key={Config.GEMINI_API_KEY}"
     )
     payload = {
         "systemInstruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
@@ -147,13 +168,13 @@ def _ask_gemini(contents):
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code in (429, 403):
-            _gemini_blocked_until = now + 600
-            _log.warning("Gemini %s (quota/auth) - cooldown 10min", e.code)
+            _gemini_blocked_until[model] = time.time() + 600
+            _log.warning("Gemini %s on %s (quota/auth) - cooldown 10min", e.code, model)
         else:
-            _log.warning("Gemini HTTP %s: %s", e.code, e.read(300).decode("utf-8", "replace"))
+            _log.warning("Gemini HTTP %s on %s: %s", e.code, model, e.read(300).decode("utf-8", "replace"))
         return None
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as e:
-        _log.warning("Gemini request failed: %s", e)
+        _log.warning("Gemini request failed (%s): %s", model, e)
         return None
     candidates = body.get("candidates") or []
     if not candidates:
