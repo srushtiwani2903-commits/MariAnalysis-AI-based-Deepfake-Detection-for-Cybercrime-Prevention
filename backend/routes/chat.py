@@ -26,6 +26,11 @@ _log = logging.getLogger("chat.gemini")
 # fast (via the fallback) instead of waiting on the API every time.
 _gemini_blocked_until = 0.0
 
+# Tiny in-memory cache for repeated first-turn questions (quick-reply chips):
+# identical questions skip the network round-trip entirely.
+_reply_cache = {}
+_REPLY_CACHE_MAX = 128
+
 # (keywords, intent, reply)
 _KB = [
     (["report", "file complaint", "cybercrime", "police", "1930", "helpline", "law enforcement"],
@@ -134,6 +139,7 @@ def _ask_gemini(contents):
         "generationConfig": {
             "temperature": 0.7,
             "maxOutputTokens": Config.GEMINI_MAX_OUTPUT_TOKENS,
+            "thinkingConfig": {"thinkingBudget": 0},
         },
     }
     req = urllib.request.Request(
@@ -201,8 +207,17 @@ def chat():
                 contents.append({"role": _ROLE_MAP[role], "parts": [{"text": text}]})
     contents.append({"role": "user", "parts": [{"text": message}]})
 
+    cache_key = message.lower()
+    is_first_turn = len(contents) == 1
+    if is_first_turn and cache_key in _reply_cache:
+        return jsonify({"reply": _reply_cache[cache_key], "intent": "gemini", "source": "cache"})
+
     reply = _ask_gemini(contents)
     if reply:
+        if is_first_turn:
+            if len(_reply_cache) >= _REPLY_CACHE_MAX:
+                _reply_cache.pop(next(iter(_reply_cache)))
+            _reply_cache[cache_key] = reply
         return jsonify({"reply": reply, "intent": "gemini", "source": "gemini"})
 
     text = message.lower()
