@@ -133,7 +133,7 @@ export default function Chatbot() {
         aria-label="Toggle assistant"
         className="accent-g-moss fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple text-white shadow-xl shadow-neon-purple/30 flex items-center justify-center"
       >
-        {open ? <XMarkIcon className="w-6 h-6" /> : <ChatbotAvatar mood={mood} size={38} />}
+        {open ? <XMarkIcon className="w-6 h-6" /> : <ChatbotAvatar mood={mood} size={46} />}
       </motion.button>
     </>
   );
