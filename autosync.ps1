@@ -1,7 +1,10 @@
-# MariAnalysis auto-sync: pull collaborator changes from origin/main and run
-# the updated project. Registered as a Scheduled Task (every 5 minutes + at
-# logon). Local uncommitted changes are stashed before the pull and restored
-# afterwards; if that merge conflicts, the stash is kept for manual resolution.
+# MariAnalysis auto-sync: two-way sync with origin/main.
+#  - PULL: collaborator changes from GitHub are fetched and applied (local
+#    uncommitted edits are stashed first and restored after; on conflict the
+#    stash is kept for manual resolution).
+#  - PUSH: any local change (new/edited files included) is auto-committed and
+#    pushed to GitHub, so work done on this PC reaches the repo automatically.
+# Registered as a Scheduled Task (every 5 minutes + at logon).
 $ErrorActionPreference = "SilentlyContinue"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backend = Join-Path $root "backend"
@@ -24,6 +27,13 @@ function Stop-Backends {
     } | ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }
     Start-Sleep -Seconds 1
 }
+function Stop-Port([int]$port) {
+    $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    if ($conn) { $conn | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {
+        Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
+    } }
+    Start-Sleep -Seconds 1
+}
 
 Log "=== autosync run ==="
 
@@ -32,36 +42,57 @@ Push-Location $root
 git fetch origin --prune | Out-Null
 if ($LASTEXITCODE -ne 0) { Log "git fetch failed - will retry next cycle"; Pop-Location; exit }
 
-$behind = [int](git rev-list --count HEAD..origin/main 2>$null)
-if ($behind -le 0) { Log "up to date"; Pop-Location; exit }
-Log "behind origin/main by $behind commit(s)"
-
-$dirty = git status --porcelain | Where-Object { $_ -match '^ ?[MADRCU]' }
-$stashed = $false
-if ($dirty) {
-    git stash push -m "autosync $(Get-Date -Format o)" | Out-Null
-    if ($LASTEXITCODE -eq 0) { $stashed = $true; Log "stashed local changes ($($dirty.Count) file(s))" }
-    else { Log "stash failed - aborting pull"; Pop-Location; exit }
-}
-
+$pulled = $false
 $before = git rev-parse HEAD
-git pull --ff-only origin main
-$ok = ($LASTEXITCODE -eq 0)
-if ($ok) {
-    $after = git rev-parse HEAD
-    Log "pulled $($before.Substring(0,7)) -> $($after.Substring(0,7))"
-} else {
-    Log "pull failed (likely conflict with local changes) - resolve manually"
-    if ($stashed) { git stash pop | Out-Null; Log "stash popped (after failed pull)" }
-    Pop-Location
-    exit
+$behind = [int](git rev-list --count HEAD..origin/main 2>$null)
+if ($behind -gt 0) {
+    Log "behind origin/main by $behind commit(s)"
+
+    $dirty = git status --porcelain | Where-Object { $_.Trim() -ne "" }
+    $stashed = $false
+    if ($dirty) {
+        git stash push -u -m "autosync $(Get-Date -Format o)" | Out-Null
+        if ($LASTEXITCODE -eq 0) { $stashed = $true; Log "stashed local changes ($($dirty.Count) file(s))" }
+        else { Log "stash failed - aborting pull"; Pop-Location; exit }
+    }
+
+    git pull --ff-only origin main
+    $ok = ($LASTEXITCODE -eq 0)
+    if ($ok) {
+        $after = git rev-parse HEAD
+        $pulled = $true
+        Log "pulled $($before.Substring(0,7)) -> $($after.Substring(0,7))"
+    } else {
+        Log "pull failed (likely conflict with local changes) - resolve manually"
+        if ($stashed) { git stash pop | Out-Null; Log "stash popped (after failed pull)" }
+        Pop-Location
+        exit
+    }
+
+    if ($stashed) {
+        git stash pop | Out-Null
+        if ($LASTEXITCODE -eq 0) { Log "stash popped" }
+        else { Log "stash pop CONFLICT - run 'git stash list' and 'git stash pop' to resolve" }
+    }
 }
 
-if ($stashed) {
-    git stash pop | Out-Null
-    if ($LASTEXITCODE -eq 0) { Log "stash popped" }
-    else { Log "stash pop CONFLICT - run 'git stash list' and 'git stash pop' to resolve" }
+# --- push local work to GitHub (auto-commit + auto-push) ---
+$dirty = git status --porcelain | Where-Object { $_.Trim() -ne "" }
+if ($dirty) {
+    git add -A
+    git commit -m "Auto-sync: local changes $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    if ($LASTEXITCODE -eq 0) { Log "auto-committed $($dirty.Count) file(s)" }
+    else { Log "nothing to commit after add" }
 }
+$ahead = [int](git rev-list --count origin/main..HEAD 2>$null)
+$pushed = $false
+if ($ahead -gt 0) {
+    git push origin main
+    if ($LASTEXITCODE -eq 0) { $pushed = $true; Log "pushed $ahead commit(s) to origin/main" }
+    else { Log "push failed (remote may have new commits) - will retry next cycle" }
+}
+
+if (-not $pulled -and -not $pushed) { Log "up to date"; Pop-Location; exit }
 
 $changed = git diff --name-only $before..HEAD
 
