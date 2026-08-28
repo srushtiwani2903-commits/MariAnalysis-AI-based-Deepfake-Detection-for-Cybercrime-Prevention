@@ -1,14 +1,15 @@
 """Reference comparison for the deepfake scan.
 
-On first use it pulls a small sample of real + fake images from Kaggle into a
-temp dir (auto-deleted), builds per-class feature distributions, and scores
-later scans against them. The profile is cached in-process, so webcam and URL
-scans never re-download.
+On first use it pulls a small sample of real + fake media (images or audio)
+from Kaggle into a temp dir (auto-deleted), builds per-class feature
+distributions, and scores later scans against them. The profiles are cached
+in-process, so webcam, URL and repeated scans never re-download.
 
 Usage:
     from services.kaggle_reference import kaggle_reference
-    kaggle_reference.ensure_built()        # kick off a background build
-    ref = kaggle_reference.score(features) # dict or None
+    kaggle_reference.ensure_built()                  # kick off a background build
+    ref = kaggle_reference.score(features)           # image features (default)
+    ref = kaggle_reference.score(features, media_type="audio")
 """
 import logging
 import os
@@ -19,18 +20,26 @@ from collections import defaultdict
 from contextlib import contextmanager
 
 from config import Config
-from services.analyze_image import feature_vector
 
 logger = logging.getLogger("kaggle_reference")
 
-# Feature keys used for the reference comparison (must match analyze_image).
-_KEYS = [
-    "error_level_analysis",
-    "texture_uniformity",
-    "recompression_similarity",
-    "color_flatness",
-    "histogram_entropy",
-]
+# Feature keys used for the reference comparison (must match the analyzers).
+_KEYS_BY_MEDIA = {
+    "image": [
+        "error_level_analysis",
+        "texture_uniformity",
+        "recompression_similarity",
+        "color_flatness",
+        "histogram_entropy",
+    ],
+    "audio": [
+        "spectral_flatness",
+        "zero_crossing_rate",
+        "mfcc_variance",
+        "rms_energy",
+    ],
+}
+_DEFAULT_MEDIA = "image"
 
 
 class _Profile:
@@ -45,36 +54,38 @@ class _Profile:
 
 class KaggleReference:
     def __init__(self):
-        self._profile = None
-        self._status = "idle"          # idle | building | ready | error
-        self._error = ""
+        self._profiles = {}     # media_type -> _Profile
+        self._status = {}       # media_type -> idle | building | ready | error
+        self._error = {}        # media_type -> message
         self._lock = threading.Lock()
         self._cache = {}
 
     # ------------------------------------------------------------------ API
     @property
     def status(self):
-        return self._status
+        return self._status.get(_DEFAULT_MEDIA, "idle")
 
     def error(self):
-        return self._error
+        return self._error.get(_DEFAULT_MEDIA, "")
 
-    def ensure_built(self):
+    def ensure_built(self, media_type=_DEFAULT_MEDIA):
         """Trigger a build in a background thread if one hasn't run yet."""
         with self._lock:
-            if self._status in ("idle",):
-                self._status = "building"
-                threading.Thread(target=self._build, daemon=True).start()
+            if self._status.get(media_type) in (None, "idle"):
+                self._status[media_type] = "building"
+                threading.Thread(target=self._build, args=(media_type,),
+                                 daemon=True).start()
 
-    def score(self, features):
-        """Return reference info for an image feature dict, or None if unready."""
-        profile = self._profile
+    def score(self, features, media_type=_DEFAULT_MEDIA):
+        """Return reference info for a feature dict, or None if unready."""
+        profile = self._profiles.get(media_type)
         if profile is None or features is None:
             return None
+        keys = _KEYS_BY_MEDIA.get(media_type, _KEYS_BY_MEDIA[_DEFAULT_MEDIA])
         dists = {}
         for cls, stats in profile.classes.items():
             terms = []
-            for key in _KEYS:
+            for key in keys:
                 value = features.get(key)
                 mean, std = stats.get(key, (0.5, 1.0))
                 if value is None or std <= 1e-9:
@@ -89,6 +100,7 @@ class KaggleReference:
         fake_likelihood = real_d / (real_d + fake_d) if (real_d + fake_d) > 0 else 0.5
         return {
             "status": "ready",
+            "media_type": media_type,
             "dataset": profile.slug,
             "fake_likelihood": round(fake_likelihood, 4),
             "closer_to": "fake" if fake_likelihood >= 0.5 else "real",
@@ -96,42 +108,45 @@ class KaggleReference:
             "created_at": int(profile.created_at),
         }
 
-    def available(self):
-        return self._status == "ready" and self._profile is not None
+    def available(self, media_type=_DEFAULT_MEDIA):
+        return (self._status.get(media_type) == "ready"
+                and media_type in self._profiles)
 
     # ------------------------------------------------------------- internals
-    def _build(self):
+    def _build(self, media_type):
         try:
-            self._profile = self._build_profile()
+            profile = self._build_profile(media_type)
             with self._lock:
-                self._status = "ready"
-            logger.info("Kaggle reference profile ready (dataset=%s).",
-                        self._profile.slug)
+                self._profiles[media_type] = profile
+                self._status[media_type] = "ready"
+            logger.info("Kaggle reference profile ready (dataset=%s, media=%s).",
+                        profile.slug, media_type)
         except Exception as exc:  # noqa: BLE001
-            self._error = str(exc)
+            self._error[media_type] = str(exc)
             with self._lock:
-                self._status = "error"
-            logger.warning("Kaggle reference build failed: %s", exc)
+                self._status[media_type] = "error"
+            logger.warning("Kaggle reference build failed (%s): %s", media_type, exc)
 
-    def _build_profile(self):
+    def _build_profile(self, media_type):
         from ml.kaggle_pipeline import resolve_credentials, write_kaggle_json
 
         # Force credentials resolution so the Kaggle client is authenticated.
         write_kaggle_json()
         resolve_credentials()
 
-        slug = _reference_slug()
+        slug = _reference_slug(media_type)
         n = Config.KAGGLE_REFERENCE_SAMPLE_SIZE
+        keys = _KEYS_BY_MEDIA.get(media_type, _KEYS_BY_MEDIA[_DEFAULT_MEDIA])
 
         profile = _Profile(slug)
-        with _temp_reference_media(slug, n) as (per_class, _parent):
+        with _temp_reference_media(media_type, slug, n) as (per_class, _parent):
             for cls, paths in per_class.items():
-                vectors = [_features(path) for path in paths]
+                vectors = [_features(path, media_type) for path in paths]
                 vectors = [v for v in vectors if v is not None]
                 profile.samples[cls] = len(vectors)
                 stats = defaultdict(list)
                 for v in vectors:
-                    for key in _KEYS:
+                    for key in keys:
                         stats[key].append(v[key])
                 profile.classes[cls] = {
                     key: _mean_std(values) for key, values in stats.items()
@@ -141,22 +156,32 @@ class KaggleReference:
         return profile
 
 
-def _reference_slug():
+def _reference_slug(media_type=_DEFAULT_MEDIA):
     from ml.data_config import get_registry
 
     for entry in get_registry():
-        if entry["media"] == "image":
+        if entry["media"] == media_type:
             return entry["slug"]
-    raise RuntimeError("No image dataset configured in the Kaggle registry.")
+    raise RuntimeError(f"No {media_type} dataset configured in the Kaggle registry.")
 
 
-def _features(path):
-    """Compute the analyzer feature vector for a reference image (best-effort)."""
+# Parent-folder keywords used to split a raw Kaggle dataset into class labels.
+_REAL_TOKENS = ("real", "bonafide", "genuine", "original", "human", "natural")
+_FAKE_TOKENS = ("fake", "spoof", "cloned", "clone", "synthetic", "generated", "ai_")
+
+
+def _features(path, media_type=_DEFAULT_MEDIA):
+    """Compute the analyzer feature vector for a reference file (best-effort)."""
     try:
+        if media_type == "audio":
+            from services.analyze_audio import _librosa_features
+            feats, ok = _librosa_features(path)
+            return feats if ok else None
         from PIL import Image
 
         with Image.open(path) as img:
             img.verify()
+        from services.analyze_image import feature_vector
         return feature_vector(Image.open(path).convert("RGB"))
     except Exception:  # noqa: BLE001
         return None
@@ -169,11 +194,11 @@ def _mean_std(values):
 
 
 @contextmanager
-def _temp_reference_media(slug, n):
-    """Download n real + n fake images straight from Kaggle into a temp dir.
+def _temp_reference_media(media_type, slug, n):
+    """Download n real + n fake samples straight from Kaggle into a temp dir.
 
     Yields ({'fake': [...paths], 'real': [...]}, temp_dir). The temp dir (and
-    every downloaded image) is deleted when the block exits, so nothing from the
+    every downloaded file) is deleted when the block exits, so nothing from the
     raw dataset ever persists in the project.
     """
     from kaggle.api.kaggle_api_extended import KaggleApi
@@ -181,7 +206,17 @@ def _temp_reference_media(slug, n):
     api = KaggleApi()
     api.authenticate()
 
-    # List files to discover real/fake paths.
+    def _label(name):
+        """Return 'fake' / 'real' from the file's parent folder name (best-effort)."""
+        folder = os.path.basename(os.path.dirname(name)).lower()
+        if any(tok in folder for tok in _FAKE_TOKENS):
+            return "fake"
+        if any(tok in folder for tok in _REAL_TOKENS):
+            return "real"
+        return None
+
+    # List files to discover real/fake paths. Judge by the parent folder, not
+    # the full path - dataset roots often contain "real_and_fake".
     fake_paths, real_paths = [], []
     page_token = None
     for _ in range(60):
@@ -191,13 +226,10 @@ def _temp_reference_media(slug, n):
             break
         for f in files:
             name = getattr(f, "name", "") or ""
-            low = os.path.basename(name).lower()
-            folder = os.path.basename(os.path.dirname(name)).lower()
-            # Judge by parent folder (training_fake / training_real), not the
-            # full path - dataset roots often contain "real_and_fake".
-            if "fake" in folder:
+            cls = _label(name)
+            if cls == "fake":
                 fake_paths.append(name)
-            elif "real" in folder:
+            elif cls == "real":
                 real_paths.append(name)
         page_token = getattr(resp, "next_page_token", None)
         if not page_token:
@@ -209,6 +241,8 @@ def _temp_reference_media(slug, n):
         raise RuntimeError(
             f"Could not locate real/fake labelled files in Kaggle dataset {slug}.")
 
+    fmt = "audio sample" if media_type == "audio" else "image"
+    timeout = 15 if media_type == "audio" else 12
     parent = tempfile.mkdtemp(prefix="marianalysis_ref_")
     out = {"fake": [], "real": []}
     try:
@@ -218,7 +252,7 @@ def _temp_reference_media(slug, n):
                 if len(out[cls]) >= n:
                     break
                 try:
-                    _download_with_timeout(api, slug, name, parent, timeout=12)
+                    _download_with_timeout(api, slug, name, parent, timeout=timeout)
                     cand = os.path.join(parent, os.path.basename(name))
                     if not (os.path.isfile(cand) and os.path.getsize(cand) > 0):
                         claimed = set(out["fake"]) | set(out["real"])
@@ -228,7 +262,7 @@ def _temp_reference_media(slug, n):
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("skip %s: %s", name, exc)
         if not out["fake"] or not out["real"]:
-            raise RuntimeError("Kaggle sample download produced no images.")
+            raise RuntimeError(f"Kaggle sample download produced no {fmt}s.")
         yield out, parent
     finally:
         import shutil

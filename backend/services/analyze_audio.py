@@ -109,6 +109,20 @@ def analyze_audio(file_path, filename, size_bytes):
         features["prosody_variance"] = 0.5
         features["decode_error"] = True
 
+    # ----------------------- Kaggle reference blend ------------------------ #
+    # Blend with the Kaggle audio reference profile when it agrees with the
+    # heuristic verdict - boosts confidence against real human speech vs
+    # cloned/synthesised voice samples pulled from Kaggle.
+    kaggle_info = None
+    try:
+        from services.kaggle_reference import kaggle_reference
+        kaggle_reference.ensure_built("audio")
+        kaggle_info = kaggle_reference.score(features, media_type="audio")
+        if kaggle_info and kaggle_info.get("status") == "ready":
+            base = max(0.0, min(1.0, 0.75 * base + 0.25 * kaggle_info["fake_likelihood"]))
+    except Exception:  # noqa: BLE001
+        kaggle_info = None
+
     models, fake_probability = build_models("audio", base * 100, filename, spread=4.5)
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
@@ -161,6 +175,7 @@ def analyze_audio(file_path, filename, size_bytes):
         "file_hash": file_hash,
         "model": "spectral-CNN-v1",
         "spectrogram_available": has_librosa,
+        "kaggle_reference": kaggle_info,
     }
 
 

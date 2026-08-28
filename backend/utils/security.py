@@ -90,8 +90,6 @@ _IMAGE_MAGIC = {
     b"\x89PNG\r\n\x1a\n": "png",               # PNG
     b"GIF87a": "gif", b"GIF89a": "gif",        # GIF
 }
-_VIDEO_MAGIC = {b"\x00\x00\x00\x18ftyp": "mp4", b"\x1aE\xdf\xa3": "mkv"}
-_AUDIO_MAGIC = {b"ID3": "mp3", b"\xff\xfb": "mp3", b"OggS": "ogg", b"fLaC": "flac"}
 
 
 def sanitize_filename(filename: str) -> str:
@@ -108,19 +106,46 @@ def allowed_extension(filename: str, allowed_exts: set) -> bool:
 def sniff_matches_magic(extension: str, head: bytes) -> bool:
     """Best-effort magic-byte check. Returns True when the extension matches file content."""
     ext = Path(extension).suffix.lower().lstrip(".") or extension.lower().lstrip(".")
-    # RIFF wraps both WEBP (image) and WAVE (audio); bytes 8:12 tell them apart.
+    # RIFF wraps WEBP (image), WAVE (audio) and AVI (video); bytes 8:12 tell them apart.
     if head[:4] == b"RIFF":
-        if head[8:12] == b"WEBP":
+        kind = head[8:12]
+        if kind == b"WEBP":
             return ext == "webp"
-        if head[8:12] == b"WAVE":
+        if kind == b"WAVE":
             return ext == "wav"
-        return ext in {"webp", "wav"}
-    table = {**_IMAGE_MAGIC, **_VIDEO_MAGIC, **_AUDIO_MAGIC}
-    for magic, magic_ext in table.items():
+        if kind == b"AVI ":
+            return ext == "avi"
+        return ext in {"webp", "wav", "avi"}
+    # Audio magic.
+    # MP3: an ID3 tag, or a raw MPEG audio frame sync word (0xFF followed by a
+    # byte whose top 3 bits are set - covers 0xFB/0xF3/0xFA/0xE3 ...).
+    if head[:3] == b"ID3" or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0):
+        return ext == "mp3"
+    if head[:4] == b"OggS":
+        return ext == "ogg"
+    if head[:4] == b"fLaC":
+        return ext == "flac"
+    # ISO BMFF ('ftyp') is shared by MP4 video and M4A audio; judge by brand.
+    if head[4:8] == b"ftyp":
+        brand = head[8:12]
+        if brand in {b"M4A ", b"m4a ", b"M4B ", b"M4P "}:
+            return ext == "m4a"
+        if ext == "m4a":
+            return True  # user-declared .m4a with any mp4-styled container
+        return ext == "mp4"
+    # Image magic.
+    for magic, magic_ext in _IMAGE_MAGIC.items():
         if head.startswith(magic):
             return ext == magic_ext
+    # Matroska / WebM share the EBML magic.
+    if head[:4] == b"\x1a\x45\xdf\xa3":
+        return ext in {"mkv", "webm"}
     # Unknown magic: fall back to the known extension list (degraded trust).
-    return ext in {"jpg", "jpeg", "png", "bmp", "tiff", "webp", "mp4", "avi", "mov", "wav", "flac", "m4a"}
+    # MP3 is intentionally absent - every real MP3 starts with an ID3 tag or
+    # an MPEG frame sync word, so a file with neither is rejected, not trusted.
+    return ext in {"jpg", "jpeg", "png", "bmp", "tiff", "webp",
+                   "mp4", "avi", "mov", "mkv", "webm",
+                   "wav", "ogg", "flac", "m4a"}
 
 
 def format_limit(max_bytes: int) -> str:
