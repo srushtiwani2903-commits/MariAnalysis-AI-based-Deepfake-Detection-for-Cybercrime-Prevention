@@ -26,23 +26,25 @@ each other another between among against through across beyond per via s t d
 """.split())
 
 _GPT_SIGNALS = (
-    "it is important to", "it is worth noting", "worth noting that",
-    "in conclusion", "to conclude", "in summary", "in essence",
-    "furthermore", "moreover", "additionally", "consequently", "therefore,",
-    "in today's", "in the modern era", "in the modern world", "in the digital age",
-    "in recent years", "in today's fast-paced world",
-    "plays a crucial role", "plays a vital role", "plays a significant role",
-    "a wide range of", "when it comes to", "in this essay", "this essay will",
-    "it is essential", "it is crucial", "it is paramount", "it is vital",
-    "to sum up", "as a result", "first and foremost", "it is clear that",
-    "it is evident that", "overall,", "lastly,", "finally,", "delve into",
-    "deep dive", "in our daily lives", "in our everyday lives",
-    "both the opportunities", "the challenges they", "continue to evolve",
-    "in the years ahead", "not only", "but also", "game changer",
-    "game-changer", "cutting-edge", "stay ahead", "unlock the",
-    "ever-changing", "a plethora of", "in the realm", "in the world of",
-    "navigat", "leverag", "robust", "seamless", "when it comes",
-)
+        "it is important to", "it is worth noting", "worth noting that",
+        "in conclusion", "to conclude", "in summary", "in essence",
+        "furthermore", "moreover", "additionally", "consequently", "therefore,",
+        "in today's", "in the modern era", "in the modern world", "in the digital age",
+        "in recent years", "in today's fast-paced world", "in an increasingly digital",
+        "plays a crucial role", "plays a vital role", "plays a significant role",
+        "plays an important role in", "a wide range of", "when it comes to",
+        "in this essay", "this essay will", "it is essential", "it is crucial",
+        "it is paramount", "it is vital", "to sum up", "as a result",
+        "first and foremost", "it is clear that", "it is evident that",
+        "overall,", "lastly,", "finally,", "delve into", "deep dive",
+        "in our daily lives", "in our everyday lives", "both the opportunities",
+        "the challenges they", "continue to evolve", "in the years ahead",
+        "not only", "but also", "game changer", "game-changer", "cutting-edge",
+        "stay ahead", "unlock the", "ever-changing", "a plethora of",
+        "in the realm", "in the world of", "navigat", "leverag", "robust",
+        "seamless", "when it comes", "i hope this email finds you well",
+        "at your earliest convenience", "increase user engagement",
+    )
 
 _GPT_STRICT_PAIRS = (("not only", "but also"),)
 
@@ -134,7 +136,7 @@ def _gpt_suspicion(text):
     for pair in _GPT_STRICT_PAIRS:
         if all(p in low for p in pair):
             hits += 1
-    return _clamp01(hits / 2.5)
+    return _clamp01(hits / 2.0)
 
 
 def _sentence_anomaly_scores(text, ppl_susp):
@@ -172,12 +174,11 @@ def analyze_text(text, filename="text-input.txt"):
     avg_len = sum(len(_tokenize(s)) for s in _sentences(text)) / max(1, len(_sentences(text)))
 
     fake_probability = 100.0 * (
-        0.20 * ppl_susp
-        + 0.24 * burst_susp
-        + 0.16 * rep_susp
+        0.16 * ppl_susp
+        + 0.30 * burst_susp
+        + 0.14 * rep_susp
         + 0.12 * repeat_susp
-        + 0.28 * gpt_susp
-    )
+    ) + 40.0 * gpt_susp
 
     template_bias = _clamp01((12.0 - avg_len) / 8.0) * burst_susp * max(ppl_susp, rep_susp)
     fake_probability += 18.0 * template_bias
