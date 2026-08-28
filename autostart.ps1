@@ -56,5 +56,11 @@ while ((Get-Date) -lt $deadline) {
 }
 
 Start-Sleep -Seconds 3
-Start-Process "http://localhost:3000"
-Log "browser opened"
+# Open the site ONLY when no browser tab is already showing it — never open a second tab.
+$tabOpen = Get-Process chrome,msedge,firefox,brave -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match "marianalysis|localhost:3000" }
+if (-not $tabOpen) {
+    Start-Process "http://localhost:3000"
+    Log "browser opened"
+} else {
+    Log "tab already open — staying on current tab"
+}

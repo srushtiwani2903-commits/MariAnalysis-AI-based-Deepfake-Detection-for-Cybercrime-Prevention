@@ -52,3 +52,6 @@ Thumbs.db
 # ---------- IDE ----------
 .idea/
 .vscode/
+
+# BROWSER=none is not a secret - intentionally tracked so npm start never opens tabs
+!frontend/.env
