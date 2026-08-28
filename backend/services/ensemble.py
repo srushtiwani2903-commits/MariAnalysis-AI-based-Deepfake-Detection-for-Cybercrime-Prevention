@@ -251,9 +251,11 @@ _REASON_SPECS = {
         ("prosody_variance", "Expressive prosody", "low_is_bad"),
     ],
     "text": [
-        ("perplexity", "Natural token perplexity", "low_is_bad"),
-        ("burstiness", "Natural sentence burstiness", "low_is_bad"),
-        ("repetition", "Limited token repetition", "low_is_bad"),
+        ("perplexity", "Natural token perplexity", "high_is_bad"),
+        ("burstiness", "Natural sentence burstiness", "high_is_bad"),
+        ("repetition", "Limited token repetition", "high_is_bad"),
+        ("repetition_rate", "No repeated sentence patterns", "high_is_bad"),
+        ("ai_style_patterns", "No formulaic AI-style phrasing", "high_is_bad"),
     ],
     "email": [
         ("urgency_language", "No manipulative urgency", "low_is_bad"),

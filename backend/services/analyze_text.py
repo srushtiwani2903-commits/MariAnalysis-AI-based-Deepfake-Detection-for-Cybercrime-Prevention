@@ -191,7 +191,7 @@ def analyze_text(text, filename="text-input.txt"):
     fake_probability = max(0.0, min(100.0, fake_probability))
 
     gemini = local = None
-    if num_tokens >= 12:
+    if num_tokens >= 25:
         gemini = gemini_score("text", text=text)
         local = local_score("text", text=text)
     blended = blend_scores(fake_probability, gemini, local)
