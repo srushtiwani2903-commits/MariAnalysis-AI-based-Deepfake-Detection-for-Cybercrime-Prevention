@@ -6,7 +6,9 @@ export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("deepguard-theme");
     if (saved) return saved === "dark";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    // Default to light so the warm cream background shows on first load,
+    // regardless of the OS preference. The navbar toggle can switch to dark.
+    return false;
   });
 
   useEffect(() => {
