@@ -168,6 +168,22 @@ def _reference_slug(media_type=_DEFAULT_MEDIA):
 # Parent-folder keywords used to split a raw Kaggle dataset into class labels.
 _REAL_TOKENS = ("real", "bonafide", "genuine", "original", "human", "natural")
 _FAKE_TOKENS = ("fake", "spoof", "cloned", "clone", "synthetic", "generated", "ai_")
+# Casual/genre folders that mean "just clips", not a class. Audio datasets
+# usually group synthetic voices by TTS-engine folder and real voices under a
+# "real" folder, so an unmatched engine folder is treated as fake there.
+_NEUTRAL_FOLDERS = {"clips", "audio", "samples", "data", "wav", "files", "dataset", "train", "test"}
+
+
+def _label(name, media_type=_DEFAULT_MEDIA):
+    """Return 'fake' / 'real' from the file's parent folder (best-effort)."""
+    folder = os.path.basename(os.path.dirname(name)).lower()
+    if any(tok in folder for tok in _REAL_TOKENS):
+        return "real"
+    if any(tok in folder for tok in _FAKE_TOKENS):
+        return "fake"
+    if media_type == "audio" and folder and folder not in _NEUTRAL_FOLDERS:
+        return "fake"  # unmatched top-level dir in an audio dataset = TTS engine
+    return None
 
 
 def _features(path, media_type=_DEFAULT_MEDIA):
@@ -206,15 +222,6 @@ def _temp_reference_media(media_type, slug, n):
     api = KaggleApi()
     api.authenticate()
 
-    def _label(name):
-        """Return 'fake' / 'real' from the file's parent folder name (best-effort)."""
-        folder = os.path.basename(os.path.dirname(name)).lower()
-        if any(tok in folder for tok in _FAKE_TOKENS):
-            return "fake"
-        if any(tok in folder for tok in _REAL_TOKENS):
-            return "real"
-        return None
-
     # List files to discover real/fake paths. Judge by the parent folder, not
     # the full path - dataset roots often contain "real_and_fake".
     fake_paths, real_paths = [], []
@@ -226,7 +233,7 @@ def _temp_reference_media(media_type, slug, n):
             break
         for f in files:
             name = getattr(f, "name", "") or ""
-            cls = _label(name)
+            cls = _label(name, media_type)
             if cls == "fake":
                 fake_paths.append(name)
             elif cls == "real":
@@ -253,10 +260,8 @@ def _temp_reference_media(media_type, slug, n):
                     break
                 try:
                     _download_with_timeout(api, slug, name, parent, timeout=timeout)
-                    cand = os.path.join(parent, os.path.basename(name))
-                    if not (os.path.isfile(cand) and os.path.getsize(cand) > 0):
-                        claimed = set(out["fake"]) | set(out["real"])
-                        cand = _find_file(parent, claimed)
+                    claimed = set(out["fake"]) | set(out["real"])
+                    cand = _locate_download(parent, name, claimed)
                     if cand:
                         out[cls].append(cand)
                 except Exception as exc:  # noqa: BLE001
@@ -287,12 +292,22 @@ def _download_with_timeout(api, slug, name, path, timeout=20):
             raise TimeoutError(f"Kaggle download timed out: {name}")
 
 
-def _find_file(directory, claimed=None):
+def _locate_download(parent, name, claimed=None):
+    """Locate a just-downloaded file anywhere under ``parent`` (Kaggle nests).
+
+    Prefers the file whose basename matches, otherwise the newest unclaimed file.
+    Returns None when nothing usable is found.
+    """
     claimed = set(claimed or ())
+    target = os.path.basename(name).lower()
     best, best_mtime = None, 0.0
-    for name in os.listdir(directory):
-        full = os.path.join(directory, name)
-        if os.path.isfile(full) and os.path.getsize(full) > 0 and full not in claimed:
+    for root, _dirs, files in os.walk(parent):
+        for fname in files:
+            full = os.path.join(root, fname)
+            if full in claimed or not (os.path.isfile(full) and os.path.getsize(full) > 0):
+                continue
+            if fname.lower() == target:
+                return full
             mtime = os.path.getmtime(full)
             if mtime > best_mtime:
                 best, best_mtime = full, mtime
