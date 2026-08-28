@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -13,7 +13,7 @@ import FileUpload from "../components/FileUpload";
 import api from "../api/api";
 
 const MAX_TEXT_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB (backend limit)
-const MAX_READ_BYTES = 5 * 1024 * 1024; // don't read giant files into the textarea
+const MAX_READ_BYTES = 20 * 1024 * 1024; // don't read giant files into the textarea
 
 export default function TextDetection() {
   const navigate = useNavigate();
@@ -22,13 +22,12 @@ export default function TextDetection() {
   const [dragActive, setDragActive] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
-  const inputRef = useRef(null);
 
   const loadFileContent = (f) => {
     setError("");
     if (!f) return;
     if (f.size > MAX_READ_BYTES) {
-      setError("This file is too large to load into the editor (max 5 MB).");
+      setError("This file is too large to load into the editor (max 20 MB).");
       return;
     }
     const reader = new FileReader();
@@ -76,13 +75,21 @@ export default function TextDetection() {
         <ScanLoader text="Computing perplexity, burstiness and sentence anomaly scores…" />
       ) : (
         <div className="space-y-4">
+          <FileUpload
+            accept=".txt,text/plain,text/markdown,.md"
+            maxMB={20}
+            label="Drop a text file here, or click to browse"
+            hint="Accepts .txt and .md — content is loaded into the editor below · Max 20 MB"
+            onFile={loadFileContent}
+          />
+
           <div
             onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
             onDragLeave={() => setDragActive(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragActive(false);
-              loadFile(e.dataTransfer.files?.[0]);
+              loadFileContent(e.dataTransfer.files?.[0]);
             }}
             className={`relative rounded-2xl transition-all duration-200 ${
               dragActive ? "ring-2 ring-neon-blue bg-neon-blue/5" : ""
@@ -118,16 +125,6 @@ export default function TextDetection() {
               {text.trim().split(/\s+/).filter(Boolean).length} words · {text.length} characters
             </p>
             <div className="flex items-center gap-3">
-              <button onClick={() => inputRef.current?.click()} className="btn-secondary !py-2.5">
-                <CloudArrowUpIcon className="w-4 h-4" /> Load .txt
-              </button>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".txt,text/plain,text/markdown,.md"
-                className="hidden"
-                onChange={(e) => { loadFile(e.target.files?.[0]); e.target.value = ""; }}
-              />
               <button onClick={analyze} disabled={text.trim().length < 30} className="btn-primary">
                 <DocumentTextIcon className="w-5 h-5" /> Analyze Text
               </button>
