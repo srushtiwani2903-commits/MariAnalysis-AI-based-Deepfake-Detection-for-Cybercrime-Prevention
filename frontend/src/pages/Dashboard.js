@@ -60,7 +60,7 @@ export default function Dashboard() {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-strong rounded-3xl p-8 relative overflow-hidden"
+        className="glass-strong wob-lg p-8 relative overflow-hidden"
       >
         <div className="scan-overlay opacity-30" />
         <div className="flex flex-wrap items-center justify-between gap-6">
@@ -72,6 +72,7 @@ export default function Dashboard() {
             <p className="text-slate-500 dark:text-slate-400 mt-2">
               See your recent scans, check how often fakes show up, and start a new one.
             </p>
+            <p className="hand hand-sm text-amber-700/80 dark:text-amber-200/70 -rotate-1 mt-1">— your lab notes, straight from the scans ✎</p>
           </div>
           <div className="flex gap-3">
             <Link to="/detect" className="btn-primary accent-g-emerald">
