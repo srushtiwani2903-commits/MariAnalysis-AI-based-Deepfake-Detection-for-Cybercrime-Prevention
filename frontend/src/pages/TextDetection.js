@@ -9,9 +9,11 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import ScanLoader from "../components/ScanLoader";
+import FileUpload from "../components/FileUpload";
 import api from "../api/api";
 
-const MAX_TEXT_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB
+const MAX_TEXT_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB (backend limit)
+const MAX_READ_BYTES = 5 * 1024 * 1024; // don't read giant files into the textarea
 
 export default function TextDetection() {
   const navigate = useNavigate();
@@ -22,18 +24,17 @@ export default function TextDetection() {
   const [error, setError] = useState("");
   const inputRef = useRef(null);
 
-  const loadFile = (f) => {
+  const loadFileContent = (f) => {
     setError("");
     if (!f) return;
-    if (f.size > MAX_TEXT_BYTES) {
-      setError("Text exceeds the 20 GB limit. Not more than 20 GB will accept.");
+    if (f.size > MAX_READ_BYTES) {
+      setError("This file is too large to load into the editor (max 5 MB).");
       return;
     }
     const reader = new FileReader();
     reader.onerror = () => setError("Could not read the file. Please try another one.");
     reader.onload = () => {
-      const content = String(reader.result || "");
-      setText(content);
+      setText(String(reader.result || ""));
       setFileName(f.name || "");
     };
     reader.readAsText(f);

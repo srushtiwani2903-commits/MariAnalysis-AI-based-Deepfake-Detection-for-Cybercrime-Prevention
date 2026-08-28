@@ -41,10 +41,14 @@ _GPT_SIGNALS = (
         "the challenges they", "continue to evolve", "in the years ahead",
         "not only", "but also", "game changer", "game-changer", "cutting-edge",
         "stay ahead", "unlock the", "ever-changing", "a plethora of",
-        "in the realm", "in the world of", "navigat", "leverag", "robust",
-        "seamless", "when it comes", "i hope this email finds you well",
-        "at your earliest convenience", "increase user engagement",
+        "in the realm", "in the world of", "when it comes",
+        "i hope this email finds you well", "at your earliest convenience",
+        "increase user engagement",
     )
+
+# Weak single-word AI buzzwords: can appear in human writing too, so they
+# only count half a hit each towards the GPT signal.
+_BUZZ_WORDS = (" navigat", " leverag", " robust", " seamless", " cutting-edge")
 
 _GPT_STRICT_PAIRS = (("not only", "but also"),)
 
@@ -136,7 +140,8 @@ def _gpt_suspicion(text):
     for pair in _GPT_STRICT_PAIRS:
         if all(p in low for p in pair):
             hits += 1
-    return _clamp01(hits / 2.0)
+    buzz = sum(0.5 for word in _BUZZ_WORDS if word in low)
+    return _clamp01((hits + buzz) / 3.5)
 
 
 def _sentence_anomaly_scores(text, ppl_susp):
@@ -184,10 +189,10 @@ def analyze_text(text, filename="text-input.txt"):
     fake_probability += 18.0 * template_bias
 
     if num_tokens < 8:
-        fake_probability = 50.0
-    elif num_tokens < 24:
+        fake_probability = 22.0 if gpt_susp < 0.5 else max(fake_probability, 55.0)
+    elif num_tokens < 24 and gpt_susp >= 0.5:
         evidence = (num_tokens - 8) / 16.0
-        fake_probability = 50.0 + (fake_probability - 50.0) * evidence
+        fake_probability = 45.0 + (fake_probability - 45.0) * evidence
 
     fake_probability = max(0.0, min(100.0, fake_probability))
 
