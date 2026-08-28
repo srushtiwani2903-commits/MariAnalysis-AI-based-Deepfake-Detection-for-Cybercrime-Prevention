@@ -8,6 +8,7 @@ import {
 } from "@heroicons/react/24/outline";
 import ResultBadge from "../components/ResultBadge";
 import ConfidenceBar from "../components/ConfidenceBar";
+import VerdictScale from "../components/VerdictScale";
 import GlassCard from "../components/GlassCard";
 import ScanLoader from "../components/ScanLoader";
 import TrustScore from "../components/TrustScore";
@@ -177,6 +178,7 @@ export default function Results() {
 
           {/* Confidence meters */}
           <div className="space-y-5">
+            <VerdictScale value={scan.fake_probability} result={scan.result} />
             <ConfidenceBar value={scan.confidence} label={`Result Confidence (${scan.result})`} />
             <ConfidenceBar value={suspiciousScale} label="Suspicious Scale" />
             <ConfidenceBar value={scan.fake_probability} label="AI / Fake Probability" />
