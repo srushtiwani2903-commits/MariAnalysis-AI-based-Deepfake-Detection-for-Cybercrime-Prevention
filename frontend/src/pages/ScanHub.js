@@ -111,7 +111,7 @@ export default function ScanHub() {
             Pick a media type below, drop your file, and MariAnalysis will check it for
             signs of AI generation or manipulation — then suggest what to do next.
           </p>
-          <p className="hand hand-sm text-amber-700/80 dark:text-amber-200/70 -rotate-1">— drop it in, we'll do the digging ✎</p>
+          <p className="hand hand-sm text-amber-700/80 dark:text-amber-200/70">— drop it in, we'll do the digging ✎</p>
       </motion.div>
 
       {/* Media type selector */}

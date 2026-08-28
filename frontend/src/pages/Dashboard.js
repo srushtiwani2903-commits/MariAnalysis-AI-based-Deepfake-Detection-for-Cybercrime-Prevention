@@ -72,7 +72,7 @@ export default function Dashboard() {
             <p className="text-slate-500 dark:text-slate-400 mt-2">
               See your recent scans, check how often fakes show up, and start a new one.
             </p>
-            <p className="hand hand-sm text-amber-700/80 dark:text-amber-200/70 -rotate-1 mt-1">— your lab notes, straight from the scans ✎</p>
+            <p className="hand hand-sm text-amber-700/80 dark:text-amber-200/70 mt-1">— your lab notes, straight from the scans ✎</p>
           </div>
           <div className="flex gap-3">
             <Link to="/detect" className="btn-primary accent-g-emerald">

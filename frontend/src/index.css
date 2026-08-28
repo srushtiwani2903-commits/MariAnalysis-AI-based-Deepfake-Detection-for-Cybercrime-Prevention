@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,26 +13,40 @@
     /* Light theme accent: cyber dark green */
     --accent: 21 128 61;   /* #15803d */
     --accent-2: 5 150 105; /* #059669 */
+    /* Sketch paper tokens */
+    --ink: 28 25 23;
+    --paper: 255 251 243;
   }
 
   html.dark {
-    --bg: #050816;
+    /* Blueprint ink — dark theme (changed from #050816) */
+    --bg: #14181f;
     --fg: #e2e8f0;
     --muted: #94a3b8;
     /* Dark theme accent: original neon blue/cyan */
     --accent: 34 211 238;  /* #22d3ee */
     --accent-2: 0 229 255; /* #00e5ff */
+    --ink: 231 229 228;    /* chalk */
+    --paper: 24 27 33;     /* dark paper */
   }
 
   body {
     background-color: var(--bg);
     color: var(--fg);
     font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    /* faint engineering-paper dot grid */
+    background-image: radial-gradient(circle, rgb(var(--ink) / 0.07) 1px, transparent 1.4px);
+    background-size: 26px 26px;
+    background-attachment: fixed;
     transition: background-color 0.4s ease, color 0.4s ease;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  html.dark body {
+    background-image: radial-gradient(circle, rgb(var(--ink) / 0.05) 1px, transparent 1.4px);
   }
 
   ::selection {
@@ -73,9 +89,6 @@
     -webkit-text-fill-color: rgb(var(--accent));
     color: rgb(var(--accent));
   }
-
-  /* ── Accent override rules live at the END of this file (unlayered) so they
-     always beat the generated gradient utilities — see bottom of file. ── */
 
   /* Primary button */
   .btn-primary {
@@ -186,9 +199,201 @@ html:not(.dark) .bg-grid-pattern {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   THEME ACCENT OVERRIDES (unlayered — always beat Tailwind utilities)
-   Light theme: selected surfaces get SOLID green shades.
-   Dark theme: Image Scan badges become dark blue.
+   SKETCH / WIREFRAME DESIGN SYSTEM (unlayered — beats Tailwind utilities)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Wobbly hand-drawn corner radius */
+.wob { border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px !important; }
+.wob-sm { border-radius: 45px 6px 55px 6px / 6px 55px 6px 55px !important; }
+.wob-lg { border-radius: 300px 25px 260px 25px / 25px 260px 25px 300px !important; }
+
+/* Handwriting font utilities */
+.hand {
+  font-family: "Caveat", "Segoe Print", cursive;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.hand-xs { font-size: 0.85rem; }
+.hand-sm { font-size: 1.05rem; }
+.hand-md { font-size: 1.35rem; }
+.hand-lg { font-size: 1.8rem; }
+
+/* Marker / highlighter underline */
+.marker {
+  background-image: linear-gradient(transparent 56%, rgb(var(--accent-2) / 0.38) 56%);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  padding: 0 0.15em;
+}
+.marker-green {
+  background-image: linear-gradient(transparent 56%, rgb(var(--accent) / 0.3) 56%);
+}
+
+/* Paper cards with an offset "pencil shadow" — overrides .glass */
+.glass,
+.glass-strong,
+.sketch-card {
+  background: rgb(var(--paper) / 0.94);
+  border: 2px solid rgb(var(--ink) / 0.55);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  box-shadow: 4px 4px 0 0 rgb(var(--ink) / 0.12);
+  backdrop-filter: blur(4px);
+}
+html.dark .glass,
+html.dark .glass-strong,
+html.dark .sketch-card {
+  border-color: rgb(var(--ink) / 0.28);
+  box-shadow: 4px 4px 0 0 rgb(var(--ink) / 0.07);
+}
+
+.glass-strong {
+  border-radius: 300px 20px 260px 20px / 20px 260px 20px 300px;
+  box-shadow: 5px 5px 0 0 rgb(var(--ink) / 0.14);
+}
+html.dark .glass-strong {
+  box-shadow: 5px 5px 0 0 rgb(var(--ink) / 0.08);
+}
+
+.sketch-card:hover,
+.glass:not(.no-hover):hover {
+  transform: translate(-1px, -1px) rotate(-0.3deg);
+  box-shadow: 6px 6px 0 0 rgb(var(--ink) / 0.16);
+}
+
+/* Washi-tape strips for a hand-pinned feel */
+.tape { position: relative; }
+.tape::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 96px;
+  height: 24px;
+  background: rgb(var(--accent-2) / 0.35);
+  border-left: 2px dashed rgb(var(--accent-2) / 0.4);
+  border-right: 2px dashed rgb(var(--accent-2) / 0.4);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.08);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* Verdict stamp — straight (not rotated) rubber-stamp look */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.9rem;
+  border: 3px double currentColor;
+  border-radius: 6px;
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-size: 0.95rem;
+  opacity: 0.92;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+/* Hand-drawn buttons — overrides .btn-primary/.btn-secondary/.btn-danger */
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  font-weight: 700;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background-color 0.15s ease;
+}
+.btn-primary:active,
+.btn-secondary:active,
+.btn-danger:active {
+  transform: translate(2px, 2px);
+  box-shadow: none !important;
+}
+.btn-primary {
+  border: 2px solid rgb(var(--accent));
+  border-radius: 55px 8px 65px 8px / 8px 65px 8px 55px;
+  color: rgb(var(--accent));
+  background: rgb(var(--paper) / 0.55);
+  box-shadow: 3px 3px 0 rgb(var(--accent) / 0.45);
+}
+.btn-primary:hover:not(:disabled) {
+  background: rgb(var(--accent));
+  color: rgb(var(--paper));
+}
+.btn-primary:disabled { opacity: 0.45; border-style: dashed; }
+.btn-secondary {
+  border: 2px dashed rgb(var(--ink) / 0.55);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  color: var(--fg);
+  background: transparent;
+  box-shadow: 3px 3px 0 rgb(var(--ink) / 0.12);
+}
+.btn-secondary:hover:not(:disabled) {
+  border-style: solid;
+  background: rgb(var(--ink) / 0.06);
+}
+.btn-danger {
+  border: 2px solid rgb(239 68 68 / 0.9);
+  border-radius: 55px 8px 65px 8px / 8px 65px 8px 55px;
+  color: rgb(239 68 68);
+  background: rgb(var(--paper) / 0.55);
+  box-shadow: 3px 3px 0 rgb(239 68 68 / 0.4);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgb(239 68 68);
+  color: rgb(var(--paper));
+}
+
+/* Rough dashed inputs — overrides .input */
+.input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="url"],
+textarea,
+select {
+  border: 2px dashed rgb(var(--ink) / 0.35);
+  border-radius: 14px 4px 18px 4px / 4px 18px 4px 14px;
+  background: rgb(var(--paper) / 0.55);
+}
+.input:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-style: solid;
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 3px rgb(var(--accent) / 0.18);
+}
+
+/* Headline gradient text (kept from original) — light: ink + wavy rule */
+.gradient-text {
+  background-image: linear-gradient(90deg, rgb(var(--accent)), rgb(var(--accent-2)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html:not(.dark) .gradient-text {
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+  color: rgb(var(--ink));
+  text-decoration: underline wavy rgb(var(--accent-2) / 0.55) 2px;
+  text-underline-offset: 8px;
+}
+
+/* Sketchy wavy divider line */
+.divider-sketch {
+  border: none;
+  height: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='16' viewBox='0 0 40 16'%3E%3Cpath d='M0 8 Q5 4 10 8 T20 8 T30 8 T40 8' fill='none' stroke='%231c1917' stroke-opacity='0.35' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  opacity: 0.6;
+}
+html.dark .divider-sketch {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='16' viewBox='0 0 40 16'%3E%3Cpath d='M0 8 Q5 4 10 8 T20 8 T30 8 T40 8' fill='none' stroke='%23e7e5e4' stroke-opacity='0.35' stroke-width='2'/%3E%3C/svg%3E");
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   THEME ACCENT OVERRIDES (kept from original — beat Tailwind utilities)
    ══════════════════════════════════════════════════════════════════ */
 
 /* Dark green stays on the navbar logo + profile avatar */
