@@ -4,7 +4,8 @@
 
 @layer base {
   :root {
-    --bg: #f1f5f9;
+    /* Light warm grayish cream background (#EBE7E2 / rgb 235,231,226) */
+    --bg: #ebe7e2;
     --fg: #0f172a;
     --muted: #64748b;
     /* Light theme accent: cyber dark green */
