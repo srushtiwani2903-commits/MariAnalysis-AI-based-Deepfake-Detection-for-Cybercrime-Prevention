@@ -103,16 +103,15 @@ export default function ScanHub() {
   return (
     <div className="container-app py-10 max-w-5xl">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-<span className="inline-flex p-3 wob-sm bg-gradient-to-br from-neon-blue to-neon-purple text-white mb-4">
+<span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-blue to-neon-purple text-white mb-4">
             <ShieldExclamationIcon className="w-8 h-8" />
           </span>
           <h1 className="text-3xl font-bold">Scan Center</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-2xl mx-auto">
             Pick a media type below, drop your file, and MariAnalysis will check it for
             signs of AI generation or manipulation — then suggest what to do next.
-          </p>
-          <p className="hand hand-sm text-amber-700/80 dark:text-amber-200/70">— drop it in, we'll do the digging ✎</p>
-      </motion.div>
+</p>
+        </motion.div>
 
       {/* Media type selector */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -125,7 +124,7 @@ export default function ScanHub() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06 }}
               onClick={() => { setActive(m.key); setError(""); }}
-              className={`relative text-left wob p-5 border-2 transition-all duration-300 ${
+              className={`relative text-left rounded-2xl p-5 border-2 transition-all duration-300 ${
                 isActive
                   ? "border-neon-blue bg-neon-blue/10 shadow-glow"
                   : "border-slate-200 dark:border-white/10 glass hover:border-neon-blue/40"
@@ -149,7 +148,7 @@ export default function ScanHub() {
         key={active}
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-strong wob-lg p-6 sm:p-8 tape"
+        className="glass-strong p-6 sm:p-8"
       >
         <div className="flex items-center gap-3 mb-6">
           <span className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${current.color} text-white`}>
@@ -221,7 +220,7 @@ export default function ScanHub() {
           ["Prevent", "Download a PDF/CSV report with practical steps to stay safe."],
         ].map(([t, d], i) => (
           <motion.div key={t} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.08 }}
-            className="glass wob rounded-xl p-5">
+            className="glass rounded-xl p-5">
             <p className="font-bold flex items-center gap-2 mb-1">
               <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-neon-blue to-neon-purple text-white text-xs flex items-center justify-center">{i + 1}</span>
               {t}

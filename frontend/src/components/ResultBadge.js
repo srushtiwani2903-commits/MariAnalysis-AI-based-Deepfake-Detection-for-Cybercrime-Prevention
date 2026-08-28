@@ -28,7 +28,7 @@ export default function ResultBadge({ result, confidence }) {
       initial={{ scale: 0.7, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 260, damping: 18 }}
-      className={`stamp inline-flex items-center gap-3 px-6 py-3 ${c.cls}`}
+      className={`inline-flex items-center gap-3 px-6 py-3 border ${c.cls}`}
     >
       <Icon className="w-8 h-8" />
       <div>

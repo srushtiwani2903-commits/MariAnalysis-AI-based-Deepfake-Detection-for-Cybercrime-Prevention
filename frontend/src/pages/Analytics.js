@@ -102,7 +102,7 @@ export default function Analytics() {
             <Bar
               data={{
                 labels: daily.map((d) => d.date.slice(5)),
-                datasets: [{ label: "Scans", data: daily.map((d) => d.scans), backgroundColor: ACCENT(dark), borderRadius: 8 }],
+                datasets: [{ label: "Scans", data: daily.map((d) => d.scans), backgroundColor: ACCENT(dark), borderRadius: 0 }],
               }}
               options={chartOptions()}
             />
@@ -115,7 +115,7 @@ export default function Analytics() {
             <Line
               data={{
                 labels: weekly.map((d) => d.week),
-                datasets: [{ label: "Scans", data: weekly.map((d) => d.scans), borderColor: g("#7c3aed"), backgroundColor: g("rgba(124,58,237,0.15)"), fill: true, tension: 0.4, pointBackgroundColor: ACCENT(dark) }],
+                datasets: [{ label: "Scans", data: weekly.map((d) => d.scans), borderColor: g("#7c3aed"), backgroundColor: g("rgba(124,58,237,0.15)"), fill: true, tension: 0, pointBackgroundColor: ACCENT(dark) }],
               }}
               options={chartOptions()}
             />
@@ -128,7 +128,7 @@ export default function Analytics() {
             <Doughnut
               data={{
                 labels: ["Fake", "Authentic", "Inconclusive"],
-                datasets: [{ data: [fakeReal.fake, fakeReal.authentic, fakeReal.inconclusive], backgroundColor: [ACCENT(dark), ...NEON.slice(1, 3)], borderColor: dark ? "#050816" : "#fff", borderWidth: 3 }],
+                datasets: [{ data: [fakeReal.fake, fakeReal.authentic, fakeReal.inconclusive], backgroundColor: [ACCENT(dark), ...NEON.slice(1, 3)], borderColor: dark ? "#14181f" : "#fff", borderWidth: 3 }],
               }}
               options={chartOptions({ cutout: "65%" })}
             />
@@ -141,7 +141,7 @@ export default function Analytics() {
             <Bar
               data={{
                 labels: ["Image", "Video", "Audio", "Text"],
-                datasets: [{ label: "Scans", data: [byType.image, byType.video, byType.audio, byType.text], backgroundColor: [ACCENT(dark), g("#7c3aed"), g("#e879f9"), g("#f59e0b")], borderRadius: 8 }],
+                datasets: [{ label: "Scans", data: [byType.image, byType.video, byType.audio, byType.text], backgroundColor: [ACCENT(dark), g("#7c3aed"), g("#e879f9"), g("#f59e0b")], borderRadius: 0 }],
               }}
               options={chartOptions()}
             />
@@ -154,7 +154,7 @@ export default function Analytics() {
             <Line
               data={{
                 labels: accuracyTrend.map((d) => `#${d.scan_index}`),
-                datasets: [{ label: "Avg confidence", data: accuracyTrend.map((d) => d.confidence), borderColor: g("#10b981"), backgroundColor: g("rgba(16,185,129,0.12)"), fill: true, tension: 0.35, pointBackgroundColor: ACCENT(dark) }],
+                datasets: [{ label: "Avg confidence", data: accuracyTrend.map((d) => d.confidence), borderColor: g("#10b981"), backgroundColor: g("rgba(16,185,129,0.12)"), fill: true, tension: 0, pointBackgroundColor: ACCENT(dark) }],
               }}
               options={chartOptions()}
             />
