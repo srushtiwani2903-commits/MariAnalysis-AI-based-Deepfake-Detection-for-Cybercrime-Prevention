@@ -86,12 +86,9 @@ def is_encrypted(ciphertext: str) -> bool:
 # File validation
 # --------------------------------------------------------------------------- #
 _IMAGE_MAGIC = {
-    b"\xff\xd8\xff": "jpg",                    # JPEG
+    b"\xff\xd8\xff": "jpg",                    # JPEG / JFIF / EXIF
     b"\x89PNG\r\n\x1a\n": "png",               # PNG
     b"GIF87a": "gif", b"GIF89a": "gif",        # GIF
-    b"\x00\x00\x00\x1c\x66\x74\x79\x70": "avif",  # AVIF (ftyp box)
-    b"\x00\x00\x00\x20\x66\x74\x79\x70": "heic",  # HEIC (ftyp box)
-    b"\x00\x00\x00\x18\x66\x74\x79\x70": "heic",  # HEIC variant
 }
 
 
@@ -109,87 +106,116 @@ def allowed_extension(filename: str, allowed_exts: set) -> bool:
 def sniff_matches_magic(extension: str, head: bytes) -> bool:
     """Best-effort magic-byte check. Returns True when the extension matches file content."""
     ext = Path(extension).suffix.lower().lstrip(".") or extension.lower().lstrip(".")
+    if len(head) < 4:
+        return True  # too short to validate — trust extension
+
     # RIFF wraps WEBP (image), WAVE (audio) and AVI (video); bytes 8:12 tell them apart.
     if head[:4] == b"RIFF":
         kind = head[8:12]
         if kind == b"WEBP":
-            return ext == "webp"
+            return ext in {"webp", "jfif"}
         if kind == b"WAVE":
             return ext in {"wav", "pcm"}
         if kind == b"AVI ":
             return ext == "avi"
-        return ext in {"webp", "wav", "avi", "pcm"}
-    # Audio magic.
-    # MP3: an ID3 tag, or a raw MPEG audio frame sync word (0xFF followed by a
-    # byte whose top 3 bits are set - covers 0xFB/0xF3/0xFA/0xE3 ...).
-    if head[:3] == b"ID3" or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0):
+        return ext in {"webp", "wav", "avi", "pcm", "jfif"}
+
+    # ID3 tag → MP3
+    if head[:3] == b"ID3":
         return ext in {"mp3", "mp2"}
+
+    # MPEG audio frame sync word (0xFF + byte with top 3 bits set)
+    if head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:
+        layer = (head[1] >> 2) & 0x03
+        if layer == 0:
+            # Layer 0 = AAC (ADTS)
+            return ext in {"aac", "m4a"}
+        # Layer I/II/III = MP3/MP2
+        return ext in {"mp3", "mp2"}
+
     if head[:4] == b"OggS":
         return ext in {"ogg", "opus"}
     if head[:4] == b"fLaC":
         return ext in {"flac", "alac"}
-    # AAC raw ADTS frame sync (0xFFF)
-    if head[:2] == b"\xff\xf1" or head[:2] == b"\xff\xf9":
-        return ext == "aac"
-    # AIFF: 'FORM' + size + 'AIFF'
-    if head[:4] == b"FORM" and head[8:12] == b"AIFF":
-        return ext == "aiff"
+    # AIFF: 'FORM' + size + 'AIFF' or 'AIFC'
+    if head[:4] == b"FORM" and head[8:12] in {b"AIFF", b"AIFC"}:
+        return ext in {"aiff", "aif"}
     # MIDI: 'MThd'
     if head[:4] == b"MThd":
         return ext in {"mid", "midi"}
-    # ISO BMFF ('ftyp') is shared by MP4 video and M4A audio; judge by brand.
-    if head[4:8] == b"ftyp":
-        brand = head[8:12]
-        if brand in {b"M4A ", b"m4a ", b"M4B ", b"M4P "}:
-            return ext == "m4a"
-        if ext == "m4a":
-            return True  # user-declared .m4a with any mp4-styled container
-        if brand in {b"qt  ", b"M4V ", b"mpg1"}:
-            return ext in {"mp4", "m4v", "mov"}
-        if brand[:3] == b"3g":
-            return ext in {"3gp", "3g2"}
-        return ext in {"mp4", "m4v", "mov", "3gp", "3g2"}
-    # MPEG-PS / MPEG-TS start codes (0x000001BA or 0x000001B3)
-    if head[:3] == b"\x00\x00\x01":
-        return ext in {"mpeg", "mpg", "ts", "mts", "m2ts", "vob"}
-    # Matroska / WebM share the EBML magic.
-    if head[:4] == b"\x1a\x45\xdf\xa3":
-        return ext in {"mkv", "webm"}
-    # FLV: 'FLV\x01'
-    if head[:4] == b"FLV\x01":
-        return ext in {"flv", "swf"}
-    # ASF/WMA/WMV: starts with ASF header GUID
-    if head[:16] == b"\x30\x26\xb2\x75\x8e\x66\xcf\x11\xa6\xd9\x00\xaa\x00\x62\xce\x6c":
-        return ext in {"asf", "wmv", "wma"}
     # AMR: '#!AMR\n'
     if head[:6] == b"#!AMR\n":
         return ext == "amr"
-    # Image magic.
+
+    # ISO BMFF ('ftyp') — shared by MP4, MOV, M4A, 3GP, AVIF, HEIC, HEIF
+    if head[4:8] == b"ftyp":
+        brand = head[8:12]
+        # M4A audio
+        if brand in {b"M4A ", b"m4a ", b"M4B ", b"M4P "}:
+            return ext == "m4a"
+        if ext == "m4a":
+            return True
+        # QuickTime / MOV
+        if brand in {b"qt  ", b"M4V ", b"mpg1"}:
+            return ext in {"mp4", "m4v", "mov"}
+        # 3GP family
+        if brand[:3] == b"3g":
+            return ext in {"3gp", "3g2"}
+        # AVIF image brands
+        if brand in {b"avif", b"avis"}:
+            return ext in {"avif", "heic", "heif"}
+        # HEIF / HEIC image brands
+        if brand in {b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1"}:
+            return ext in {"heic", "heif", "avif"}
+        # Generic ISOBMFF container (mp4 family)
+        return ext in {"mp4", "m4v", "mov", "3gp", "3g2"}
+
+    # MPEG-PS start codes (0x000001BA = pack header, 0x000001B3 = sequence header)
+    if head[:3] == b"\x00\x00\x01":
+        return ext in {"mpeg", "mpg", "ts", "mts", "m2ts", "vob", "mpg2"}
+
+    # Matroska / WebM share the EBML magic.
+    if head[:4] == b"\x1a\x45\xdf\xa3":
+        return ext in {"mkv", "webm"}
+
+    # FLV: 'FLV\x01'
+    if head[:4] == b"FLV\x01":
+        return ext in {"flv", "swf"}
+
+    # ASF header GUID (ASF/WMA/WMV)
+    if head[:16] == b"\x30\x26\xb2\x75\x8e\x66\xcf\x11\xa6\xd9\x00\xaa\x00\x62\xce\x6c":
+        return ext in {"asf", "wmv", "wma"}
+
+    # Image magic bytes.
     for magic, magic_ext in _IMAGE_MAGIC.items():
         if head.startswith(magic):
+            # JPEG magic is shared by JFIF
+            if magic_ext == "jpg":
+                return ext in {"jpg", "jpeg", "jfif"}
             return ext == magic_ext
+
     # BMP: 'BM'
     if head[:2] == b"BM":
         return ext in {"bmp", "dib"}
-    # TIFF: 'II' or 'MM'
+    # TIFF: 'II' (little-endian) or 'MM' (big-endian) + magic 42
     if head[:2] in {b"II", b"MM"}:
-        return ext in {"tiff", "tif", "dng", "cr2", "nef", "arw"}
-    # ICO: reserved=0, type=1
-    if len(head) >= 4 and head[0] == 0 and head[1] == 0 and head[2] == 1 and head[3] == 0:
+        return ext in {"tiff", "tif", "dng", "cr2", "nef", "arw", "raw"}
+    # ICO: reserved=0, type=1 or type=2
+    if len(head) >= 4 and head[0] == 0 and head[1] == 0 and head[2] in (1, 2) and head[3] == 0:
         return ext == "ico"
-    # TGA: has no reliable magic; trust extension
     # PSD: '8BPS'
     if head[:4] == b"8BPS":
         return ext == "psd"
+
     # Unknown magic: fall back to the known extension list (degraded trust).
     return ext in {
-        "jpg", "jpeg", "png", "bmp", "tiff", "tif", "webp", "gif", "avif",
-        "heic", "heif", "ico", "jfif", "tga", "raw", "cr2", "nef", "arw",
-        "dng", "psd", "eps", "svg",
+        "jpg", "jpeg", "jfif", "png", "bmp", "dib", "tiff", "tif", "webp",
+        "gif", "avif", "heic", "heif", "ico", "tga", "raw", "cr2", "nef",
+        "arw", "dng", "psd", "eps", "svg",
         "mp4", "avi", "mov", "mkv", "webm", "3gp", "3g2", "mpeg", "mpg",
         "m4v", "ogv", "flv", "wmv", "asf", "ts", "vob", "mts", "m2ts", "swf",
-        "wav", "ogg", "flac", "m4a", "aac", "opus", "wma", "aiff", "alac",
-        "amr", "mid", "midi", "pcm", "ape", "mp3", "mp2",
+        "wav", "ogg", "flac", "m4a", "aac", "opus", "wma", "aiff", "aif",
+        "alac", "amr", "mid", "midi", "pcm", "ape", "mp3", "mp2",
     }
 
 
