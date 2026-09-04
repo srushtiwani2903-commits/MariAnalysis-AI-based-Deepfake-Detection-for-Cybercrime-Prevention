@@ -110,12 +110,8 @@ def _session_response(data, token, status=200, remember_me=False):
         data["token"] = token
     resp = jsonify(data)
     if token:
-        set_access_cookies(resp, token)
-        if remember_me:
-            max_age = int(Config.JWT_REMEMBER_ME_EXPIRES.total_seconds())
-            for cookie_name in (Config.JWT_ACCESS_COOKIE_NAME, Config.JWT_ACCESS_CSRF_COOKIE_NAME):
-                if cookie_name in resp.cookies:
-                    resp.cookies[cookie_name]["max_age"] = max_age
+        max_age = int(Config.JWT_REMEMBER_ME_EXPIRES.total_seconds()) if remember_me else None
+        set_access_cookies(resp, token, max_age=max_age)
     return resp, status
 
 
