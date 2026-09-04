@@ -17,6 +17,7 @@ import {
   ShareIcon,
   FingerPrintIcon,
   BuildingOffice2Icon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
 import StatCard from "../components/StatCard";
@@ -44,14 +45,22 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     Promise.all([api.get("/history/stats"), api.get("/history?limit=5")])
       .then(([s, h]) => {
         setStats(s.data);
         setRecent(h.data.items);
+        setLoadError("");
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (err.response?.status === 401) {
+          setLoadError("Session expired. Please log in again.");
+        } else {
+          setLoadError("Could not load dashboard data. Please try again.");
+        }
+      });
   }, []);
 
   return (
@@ -80,6 +89,12 @@ export default function Dashboard() {
           </div>
         </div>
       </motion.div>
+
+      {loadError && (
+        <div className="flex items-center gap-2 text-rose-400 text-sm bg-rose-400/10 border border-rose-400/30 rounded-xl px-4 py-3">
+          <ExclamationTriangleIcon className="w-5 h-5 shrink-0" /> {loadError}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

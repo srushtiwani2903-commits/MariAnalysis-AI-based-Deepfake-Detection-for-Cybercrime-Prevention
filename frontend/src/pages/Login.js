@@ -8,6 +8,7 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ identifier: "", password: "" });
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(() => sessionStorage.getItem("deepguard-401-message") || "");
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const data = await login(form.identifier, form.password);
+      const data = await login(form.identifier, form.password, rememberMe);
       navigate(data.user?.is_admin ? "/admin" : "/dashboard");
     } catch (err) {
       setError(err.response?.data?.message || err.message);
@@ -102,6 +103,19 @@ export default function Login() {
                 placeholder="••••••••"
               />
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="remember-me"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-neon-blue focus:ring-neon-blue/50 bg-white/70 dark:bg-white/5"
+            />
+            <label htmlFor="remember-me" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+              Remember me for 30 days
+            </label>
           </div>
 
           <button type="submit" disabled={loading} className="btn-primary w-full justify-center !py-3">

@@ -107,10 +107,10 @@ export function AuthProvider({ children }) {
     return () => controller.abort();
   }, [user, navigate]);
 
-  const login = async (identifier, password) => {
+  const login = async (identifier, password, rememberMe = false) => {
     // Close this tab's stream first so re-login here doesn't kick itself.
     closeStream();
-    const { data } = await api.post("/auth/login", { identifier, password });
+    const { data } = await api.post("/auth/login", { identifier, password, remember_me: rememberMe });
     setUser(data.user);
     return data;
   };

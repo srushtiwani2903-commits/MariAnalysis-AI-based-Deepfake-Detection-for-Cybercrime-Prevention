@@ -77,18 +77,23 @@ def _active_sessions(user_id):
             .filter(ActiveSession.expires_at > now).all())
 
 
-def _issue_session(user):
+def _issue_session(user, remember_me=False):
     """Create an ActiveSession row and return a JWT carrying its jti."""
     jti = uuid4().hex
     now = _now_naive()
+    expires = Config.JWT_REMEMBER_ME_EXPIRES if remember_me else Config.JWT_ACCESS_TOKEN_EXPIRES
     db.session.add(ActiveSession(
         user_id=user.id, jti=jti,
-        expires_at=now + Config.JWT_ACCESS_TOKEN_EXPIRES,
+        expires_at=now + expires,
         ip_address=request.remote_addr,
         user_agent=(request.user_agent.string or "")[:255],
     ))
     db.session.commit()
-    return create_access_token(identity=str(user.id), additional_claims={"jti": jti})
+    return create_access_token(
+        identity=str(user.id),
+        additional_claims={"jti": jti},
+        expires_delta=expires,
+    )
 
 
 def _browser_request():
@@ -98,7 +103,7 @@ def _browser_request():
     return request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
 
-def _session_response(data, token, status=200):
+def _session_response(data, token, status=200, remember_me=False):
     """Attach the JWT to the response via an HttpOnly cookie. The raw token is
     only added to the JSON body for non-browser clients."""
     if not _browser_request() and token:
@@ -106,6 +111,11 @@ def _session_response(data, token, status=200):
     resp = jsonify(data)
     if token:
         set_access_cookies(resp, token)
+        if remember_me:
+            max_age = int(Config.JWT_REMEMBER_ME_EXPIRES.total_seconds())
+            for cookie_name in (Config.JWT_ACCESS_COOKIE_NAME, Config.JWT_ACCESS_CSRF_COOKIE_NAME):
+                if cookie_name in resp.cookies:
+                    resp.cookies[cookie_name]["max_age"] = max_age
     return resp, status
 
 
@@ -261,9 +271,10 @@ def login():
     db.session.commit()
     audit("login", user.username, "User", user.id, request.remote_addr, "Successful login")
 
-    token = _issue_session(user)
+    remember_me = bool(data.get("remember_me"))
+    token = _issue_session(user, remember_me=remember_me)
     return _session_response(
-        {"message": "Login successful.", "user": user.to_dict()}, token)
+        {"message": "Login successful.", "user": user.to_dict()}, token, remember_me=remember_me)
 
 
 @auth_bp.route("/forgot-password", methods=["POST"])

@@ -27,6 +27,7 @@ class Config:
     # --- JWT Authentication ---
     JWT_SECRET_KEY = get_secret("JWT_SECRET_KEY") or SECRET_KEY
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=int(os.environ.get("JWT_EXPIRES_HOURS", 2)))
+    JWT_REMEMBER_ME_EXPIRES = timedelta(days=int(os.environ.get("JWT_REMEMBER_ME_DAYS", 30)))
     JWT_ERROR_MESSAGE_KEY = "message"
     # Web sessions ride in an HttpOnly, Secure, SameSite cookie so the token is
     # never readable from JS/localStorage. The Authorization header stays
@@ -43,7 +44,7 @@ class Config:
     # Single active-session enforcement: after this many minutes without an
     # authenticated request the session is treated as stale and invalidated.
     # 0 disables the inactivity timeout (JWT expiry still applies).
-    SESSION_INACTIVITY_MINUTES = int(os.environ.get("SESSION_INACTIVITY_MINUTES", 30))
+    SESSION_INACTIVITY_MINUTES = int(os.environ.get("SESSION_INACTIVITY_MINUTES", 1440))
 
     # --- Database ---
     SQLALCHEMY_DATABASE_URI = os.environ.get(

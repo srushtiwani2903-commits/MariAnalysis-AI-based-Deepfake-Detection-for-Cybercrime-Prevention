@@ -35,7 +35,13 @@ export default function History() {
         setTotal(res.data.total);
         setError("");
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (err.response?.status === 401) {
+          setError("Session expired. Please log in again.");
+        } else {
+          setError(err.message || "Could not load history. Please try again.");
+        }
+      })
       .finally(() => setLoading(false));
   }, [page, q, type, result]);
 
