@@ -170,9 +170,9 @@ def sniff_matches_magic(extension: str, head: bytes) -> bool:
         # Generic ISOBMFF container (mp4 family)
         return ext in {"mp4", "m4v", "mov", "3gp", "3g2"}
 
-    # ICO: reserved=0, type=1 (icon) or type=2 (cursor)
-    # Must check before MPEG-PS because \x00\x00\x01\x00 starts with \x00\x00\x01.
-    if len(head) >= 4 and head[0] == 0 and head[1] == 0 and head[2] in (1, 2) and head[3] == 0:
+    # ICO: reserved=0, type=1 (icon). Check before MPEG-PS (\x00\x00\x01) and
+    # before TGA type-2 (\x00\x00\x02\x00) which shares the same prefix.
+    if len(head) >= 4 and head[0] == 0 and head[1] == 0 and head[2] == 1 and head[3] == 0:
         return ext == "ico"
 
     # MPEG-PS start codes (0x000001BA = pack header, 0x000001B3 = sequence header)
