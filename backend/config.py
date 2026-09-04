@@ -73,9 +73,22 @@ class Config:
     # it must be at least the largest per-media-type limit.
     MAX_CONTENT_LENGTH = max(
         MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, MAX_TEXT_BYTES, MAX_AUDIO_BYTES)
-    ALLOWED_IMAGE = {"png", "jpg", "jpeg", "webp", "bmp", "tiff"}
-    ALLOWED_VIDEO = {"mp4", "avi", "mov", "mkv", "webm"}
-    ALLOWED_AUDIO = {"mp3", "wav", "ogg", "flac", "m4a"}
+    ALLOWED_IMAGE = {
+        "png", "jpg", "jpeg", "webp", "bmp", "tiff", "tif",
+        "gif", "avif", "heic", "heif", "ico", "svg",
+        "tga", "jfif", "raw", "cr2", "nef", "arw", "dng",
+        "psd", "eps",
+    }
+    ALLOWED_VIDEO = {
+        "mp4", "avi", "mov", "mkv", "webm",
+        "3gp", "3g2", "mpeg", "mpg", "m4v", "ogv",
+        "flv", "wmv", "asf", "ts", "vob", "mts", "m2ts",
+    }
+    ALLOWED_AUDIO = {
+        "mp3", "wav", "ogg", "flac", "m4a",
+        "aac", "opus", "wma", "aiff", "alac", "amr",
+        "mid", "midi", "pcm", "ape",
+    }
 
     # --- AI Engine ---
     # Heuristics run by default with no model weights. Set MODEL_ENABLED=true

@@ -12,30 +12,30 @@ import api from "../api/api";
 const GB = 1024;
 const MEDIA = [
   {
-    key: "image", title: "Image", desc: "PNG, JPG, WebP, BMP, TIFF",
+    key: "image", title: "Image", desc: "PNG, JPG, WebP, GIF, AVIF, HEIC, BMP, TIFF, ICO, SVG, RAW, PSD",
     icon: PhotoIcon, color: "accent-imgscan-dark from-neon-blue to-neon-cyan",
-    accept: ".png,.jpg,.jpeg,.webp,.bmp,.tiff", maxMB: 1 * GB,
+    accept: ".png,.jpg,.jpeg,.webp,.bmp,.tiff,.tif,.gif,.avif,.heic,.heif,.ico,.svg,.tga,.jfif,.raw,.cr2,.nef,.arw,.dng,.psd,.eps", maxMB: 1 * GB,
     loader: "Running error-level analysis, texture stats and metadata forensics…",
     engine: "Kaggle reference: real-and-fake-face-detection",
   },
   {
-    key: "video", title: "Video", desc: "MP4, AVI, MOV, MKV, WebM",
+    key: "video", title: "Video", desc: "MP4, AVI, MOV, MKV, WebM, 3GP, MPEG, FLV, WMV, TS",
     icon: FilmIcon, color: "from-neon-purple to-fuchsia-500",
-    accept: ".mp4,.avi,.mov,.mkv,.webm", maxMB: 20 * GB,
+    accept: ".mp4,.avi,.mov,.mkv,.webm,.3gp,.3g2,.mpeg,.mpg,.m4v,.ogv,.flv,.wmv,.asf,.ts,.vob,.mts,.m2ts", maxMB: 20 * GB,
     loader: "Extracting frames, detecting faces, running temporal analysis…",
     engine: "Kaggle reference: deepfake-videos-dataset",
   },
   {
-    key: "audio", title: "Audio", desc: "MP3, WAV, OGG, FLAC, M4A",
+    key: "audio", title: "Audio", desc: "MP3, WAV, OGG, FLAC, M4A, AAC, OPUS, WMA, AIFF, AMR",
     icon: MusicalNoteIcon, color: "from-pink-500 to-rose-400",
-    accept: ".mp3,.wav,.ogg,.flac,.m4a", maxMB: 10 * GB,
+    accept: ".mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.wma,.aiff,.alac,.amr,.mid,.midi,.pcm,.ape", maxMB: 10 * GB,
     loader: "Computing spectrogram, spectral flatness and MFCC features…",
     engine: "Kaggle reference: audio-deepfake-detection-dataset",
   },
   {
-    key: "text", title: "Text", desc: "Paste or type content",
+    key: "text", title: "Text", desc: "Paste, type, or drop .txt/.md/.csv/.json/.xml/.html",
     icon: DocumentTextIcon, color: "from-amber-400 to-orange-500",
-    accept: ".txt,.md,.csv", maxMB: 20 * GB,
+    accept: ".txt,.md,.csv,.json,.xml,.html,.htm,.log,.py,.js,.ts,.java,.c,.cpp,.rb,.go,.rs,.sh,.sql,.yaml,.yml,.toml,.ini,.cfg,.conf,.rtf", maxMB: 20 * GB,
     loader: "Computing perplexity, burstiness and sentence anomaly scores…",
     engine: "Kaggle reference: ai-vs-human-text-classification",
   },

@@ -76,10 +76,10 @@ export default function TextDetection() {
       ) : (
         <div className="space-y-4">
           <FileUpload
-            accept=".txt,text/plain,text/markdown,.md"
+            accept=".txt,.md,.csv,.json,.xml,.html,.htm,.log,.py,.js,.ts,.java,.c,.cpp,.rb,.go,.rs,.sh,.sql,.yaml,.yml,.toml,.ini,.cfg,.conf,.rtf"
             maxMB={20}
             label="Drop a text file here, or click to browse"
-            hint="Accepts .txt and .md — content is loaded into the editor below · Max 20 MB"
+            hint="Accepts .txt, .md, .csv, .json, .xml, .html, .py, .js, .sql and more — content is loaded into the editor below · Max 20 MB"
             onFile={loadFileContent}
           />
 

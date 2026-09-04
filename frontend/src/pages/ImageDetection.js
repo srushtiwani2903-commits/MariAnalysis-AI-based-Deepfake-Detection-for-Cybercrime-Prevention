@@ -58,9 +58,9 @@ export default function ImageDetection() {
           <PhotoIcon className="w-8 h-8" />
         </span>
         <h1 className="text-3xl font-bold">Image Deepfake Detection</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
+          <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
           Upload an image to detect AI-generated faces, manipulated pixels and metadata anomalies.
-          Supports PNG, JPG, JPEG, WebP, BMP, TIFF.
+          Supports PNG, JPG, JPEG, WebP, BMP, TIFF, GIF, AVIF, HEIC, ICO, SVG, TGA, RAW, PSD.
         </p>
       </motion.div>
 
@@ -73,7 +73,7 @@ export default function ImageDetection() {
               <img src={preview} alt="preview" className="w-full h-56 object-cover" />
             </div>
           )}
-          <FileUpload accept=".png,.jpg,.jpeg,.webp,.bmp,.tiff" maxMB={50} onFile={analyze}
+          <FileUpload accept=".png,.jpg,.jpeg,.webp,.bmp,.tiff,.tif,.gif,.avif,.heic,.heif,.ico,.svg,.tga,.jfif,.raw,.cr2,.nef,.arw,.dng,.psd,.eps" maxMB={1024} onFile={analyze}
             label="Drop an image to analyze" />
           <div className="mt-6 glass rounded-xl p-4">
             <form onSubmit={analyzeUrl} className="flex flex-col sm:flex-row gap-3 items-end">

@@ -296,12 +296,33 @@ def detect_url():
 
 def _ext_for_content_type(content_type: str):
     mapping = {
+        # Images
         "jpeg": "jpg", "jpg": "jpg", "png": "png", "webp": "webp",
-        "bmp": "bmp", "tiff": "tiff", "mp4": "mp4", "quicktime": "mov",
-        "x-msvideo": "avi", "ogg": "ogg", "wav": "wav", "mpeg": "mp3",
-        "mpeg3": "mp3", "m4a": "m4a", "flac": "flac", "matroska": "mkv",
+        "bmp": "bmp", "tiff": "tiff", "tif": "tiff", "gif": "gif",
+        "avif": "avif", "heic": "heic", "heif": "heif", "svg": "svg",
+        "ico": "ico", "jfif": "jfif",
+        # Videos
+        "mp4": "mp4", "quicktime": "mov", "x-msvideo": "avi",
+        "x-matroska": "mkv", "x-matroska-video": "mkv",
+        "webm": "webm", "3gpp": "3gp", "3gpp2": "3g2",
+        "mpeg": "mpg", "mpg": "mpeg", "mp2p": "mpeg",
+        "x-ms-wmv": "wmv", "x-flv": "flv", "x-ms-asf": "asf",
+        "mp2t": "ts", "vob": "vob",
+        # Audio
+        "ogg": "ogg", "wav": "wav", "wave": "wav",
+        "mpeg": "mp3", "mpeg3": "mp3", "x-mpeg": "mp3",
+        "m4a": "m4a", "mp4": "m4a", "x-m4a": "m4a",
+        "flac": "flac", "x-flac": "flac",
+        "aac": "aac", "x-aac": "aac",
+        "opus": "opus", "x-opus": "opus",
+        "x-wav": "wav", "x-ms-wma": "wma",
+        "aiff": "aiff", "x-aiff": "aiff",
+        "amr": "amr", "amr-wb": "amr",
+        "x-midi": "mid", "midi": "mid",
+        "pcm": "pcm", "l16": "pcm",
     }
+    ct = content_type.lower()
     for key, ext in mapping.items():
-        if key in content_type.lower():
+        if key in ct:
             return ext
     return None

@@ -27,10 +27,10 @@ import { useAuth } from "../context/AuthContext";
 import { humanSize, timeAgo } from "../utils/format";
 
 const detectors = [
-  { to: "/detect/image", icon: PhotoIcon, title: "Image Detection", desc: "Photos, faces, screenshots", color: "accent-imgscan-dark from-neon-blue to-neon-cyan" },
-  { to: "/detect/video", icon: FilmIcon, title: "Video Detection", desc: "MP4, AVI, MOV, WebM", color: "from-neon-purple to-fuchsia-500" },
-  { to: "/detect/audio", icon: MusicalNoteIcon, title: "Audio Detection", desc: "MP3, WAV, OGG, FLAC", color: "from-pink-500 to-rose-400" },
-  { to: "/detect/text", icon: DocumentTextIcon, title: "Text Detection", desc: "AI-written content, phishing", color: "from-amber-400 to-orange-500" },
+  { to: "/detect/image", icon: PhotoIcon, title: "Image Detection", desc: "PNG, JPG, GIF, WebP, AVIF, HEIC, RAW, PSD + more", color: "accent-imgscan-dark from-neon-blue to-neon-cyan" },
+  { to: "/detect/video", icon: FilmIcon, title: "Video Detection", desc: "MP4, AVI, MOV, MKV, WebM, 3GP, MPEG, FLV, WMV", color: "from-neon-purple to-fuchsia-500" },
+  { to: "/detect/audio", icon: MusicalNoteIcon, title: "Audio Detection", desc: "MP3, WAV, OGG, FLAC, M4A, AAC, OPUS, WMA, AIFF", color: "from-pink-500 to-rose-400" },
+  { to: "/detect/text", icon: DocumentTextIcon, title: "Text Detection", desc: "TXT, MD, CSV, JSON, XML, HTML, PY, JS, SQL + more", color: "from-amber-400 to-orange-500" },
 ];
 
 const tools = [

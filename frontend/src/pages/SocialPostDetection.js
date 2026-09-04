@@ -74,7 +74,7 @@ export default function SocialPostDetection() {
                 </>
               )}
             </div>
-            <input ref={inputRef} type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,.tiff"
+            <input ref={inputRef} type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,.tiff,.tif,.gif,.avif,.heic,.heif,.ico,.svg,.tga,.jfif,.raw,.cr2,.nef,.arw,.dng,.psd,.eps"
               className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
           </div>
 

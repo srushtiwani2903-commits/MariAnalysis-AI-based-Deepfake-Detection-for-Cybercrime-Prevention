@@ -37,9 +37,9 @@ export default function VideoDetection() {
           <FilmIcon className="w-8 h-8" />
         </span>
         <h1 className="text-3xl font-bold">Video Deepfake Detection</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
+          <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
           Extract frames, detect faces and analyze temporal consistency to expose AI-generated video.
-          Supports MP4, AVI, MOV, MKV, WebM.
+          Supports MP4, AVI, MOV, MKV, WebM, 3GP, MPEG, MPG, M4V, OGV, FLV, WMV, TS, VOB, MTS.
         </p>
       </motion.div>
 
@@ -52,7 +52,7 @@ export default function VideoDetection() {
               <video src={video} controls className="w-full h-56 object-contain bg-black" />
             </div>
           )}
-          <FileUpload accept=".mp4,.avi,.mov,.mkv,.webm" maxMB={200} onFile={analyze}
+          <FileUpload accept=".mp4,.avi,.mov,.mkv,.webm,.3gp,.3g2,.mpeg,.mpg,.m4v,.ogv,.flv,.wmv,.asf,.ts,.vob,.mts,.m2ts" maxMB={20480} onFile={analyze}
             label="Drop a video to analyze" />
           {error && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}

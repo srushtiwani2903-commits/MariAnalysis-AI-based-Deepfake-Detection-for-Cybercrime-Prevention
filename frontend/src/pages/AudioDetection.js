@@ -37,9 +37,9 @@ export default function AudioDetection() {
           <MusicalNoteIcon className="w-8 h-8" />
         </span>
         <h1 className="text-3xl font-bold">Audio & Voice Clone Detection</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
+          <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
           Detect synthetic and cloned voices using spectral analysis, MFCC variance and prosody checks.
-          Supports MP3, WAV, OGG, FLAC, M4A.
+          Supports MP3, WAV, OGG, FLAC, M4A, AAC, OPUS, WMA, AIFF, ALAC, AMR.
         </p>
       </motion.div>
 
@@ -52,7 +52,7 @@ export default function AudioDetection() {
               <audio src={audio} controls className="w-full" />
             </div>
           )}
-          <FileUpload accept=".mp3,.wav,.ogg,.flac,.m4a" maxMB={100} onFile={analyze}
+          <FileUpload accept=".mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.wma,.aiff,.alac,.amr,.mid,.midi,.pcm,.ape" maxMB={10240} onFile={analyze}
             label="Drop an audio file to analyze" />
           {error && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
