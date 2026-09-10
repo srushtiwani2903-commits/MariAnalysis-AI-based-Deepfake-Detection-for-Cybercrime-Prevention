@@ -3,7 +3,7 @@ import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 
 // Explainable-AI reason checklist: which checks passed / failed.
 export default function XaiReasons({ reasons }) {
-  if (!reasons || reasons.length === 0) return null;
+  if (!Array.isArray(reasons) || reasons.length === 0) return null;
   const passed = reasons.filter((r) => r.passed).length;
   return (
     <div>

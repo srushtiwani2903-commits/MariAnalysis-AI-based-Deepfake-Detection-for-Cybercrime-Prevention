@@ -45,18 +45,34 @@ export default function Results() {
   }, [scanId]);
 
   useEffect(() => {
-    if (scan) return;
-    api
-      .get(`/history/${scanId}`)
-      .then((res) => setScan(res.data.scan))
-      .finally(() => setLoading(false));
-  }, [scanId, scan]);
-
-  useEffect(() => {
-    if (scan && scan.scan_type) {
-      api.get(`/history/${scanId}`).then((res) => setFull(res.data.scan)).catch(() => {});
-    }
-  }, [scanId, scan]);
+    if (!scanId) return;
+    let cancelled = false;
+    const fetchScan = (attempt = 0) => {
+      api.get(`/history/${scanId}`)
+        .then((res) => {
+          if (cancelled) return;
+          setScan(res.data.scan);
+          setFull(res.data.scan);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          const status = err.response?.status;
+          const retryable = !status || status >= 500;
+          if (retryable && attempt < 2) {
+            setTimeout(() => fetchScan(attempt + 1), 1200 * (attempt + 1));
+            return;
+          }
+          setError(status === 404
+            ? "Result not found. It may have been deleted."
+            : status === 401
+            ? "You are not logged in. Please log in to view this result."
+            : "Failed to load scan details. Please try again.");
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
+    if (!scan) fetchScan();
+    return () => { cancelled = true; };
+  }, [scanId]);
 
   const registerCase = async () => {
     setRegistering(true);
@@ -88,6 +104,15 @@ export default function Results() {
   };
 
   if (loading) return <div className="container-app"><ScanLoader text="Loading detection results…" /></div>;
+  if (error) return (
+    <div className="container-app py-20 text-center space-y-4">
+      <p className="text-rose-400 font-semibold">{error}</p>
+      <div className="flex justify-center gap-3">
+        <button onClick={() => window.location.reload()} className="btn-primary">Retry</button>
+        <Link to="/history" className="btn-secondary">Back to History</Link>
+      </div>
+    </div>
+  );
   if (!scan) return (
     <div className="container-app py-20 text-center">
       <p className="text-slate-400 mb-4">Result not found.</p>
@@ -96,9 +121,12 @@ export default function Results() {
   );
 
   const features = full?.model?.features || scan.features || {};
-  const sections = full?.suspicious_sections || scan.suspicious_sections || [];
-  const models = full?.models || scan.models || [];
-  const reasons = full?.reasons || scan.reasons || [];
+  const sections = Array.isArray(full?.suspicious_sections) ? full.suspicious_sections
+    : Array.isArray(scan.suspicious_sections) ? scan.suspicious_sections : [];
+  const models = Array.isArray(full?.models) ? full.models
+    : Array.isArray(scan.models) ? scan.models : [];
+  const reasons = Array.isArray(full?.reasons) ? full.reasons
+    : Array.isArray(scan.reasons) ? scan.reasons : [];
   const heatmapFile = full?.scan_metadata?.heatmap_file || scan.scan_metadata?.heatmap_file;
   const meta = full?.scan_metadata || scan.scan_metadata || {};
   const aiOrigin = meta.ai_origin || scan.ai_origin || "";
