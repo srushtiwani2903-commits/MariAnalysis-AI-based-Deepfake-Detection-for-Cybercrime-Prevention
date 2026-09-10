@@ -127,8 +127,8 @@ export default function Results() {
     : Array.isArray(scan.models) ? scan.models : [];
   const reasons = Array.isArray(full?.reasons) ? full.reasons
     : Array.isArray(scan.reasons) ? scan.reasons : [];
-  const heatmapFile = full?.scan_metadata?.heatmap_file || scan.scan_metadata?.heatmap_file;
-  const meta = full?.scan_metadata || scan.scan_metadata || {};
+  const heatmapFile = full?.scan_metadata?.heatmap_file || scan.scan_metadata?.heatmap_file || scan.heatmap_file;
+  const meta = full?.scan_metadata || scan.scan_metadata || scan.metadata || {};
   const aiOrigin = meta.ai_origin || scan.ai_origin || "";
   const suspiciousScale = meta.suspicious_scale !== undefined && meta.suspicious_scale !== ""
     ? Number(meta.suspicious_scale)
