@@ -24,7 +24,7 @@ import StatCard from "../components/StatCard";
 import ResultBadge from "../components/ResultBadge";
 import api from "../api/api";
 import { useAuth } from "../context/AuthContext";
-import { humanSize, timeAgo } from "../utils/format";
+import { humanSize, timeAgo, formatDate } from "../utils/format";
 
 const detectors = [
   { to: "/detect/image", icon: PhotoIcon, title: "Image Detection", desc: "PNG, JPG, GIF, WebP, AVIF, HEIC, RAW, PSD + more", color: "accent-imgscan-dark from-neon-blue to-neon-cyan" },
@@ -176,7 +176,7 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{s.filename}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {s.scan_type} · {humanSize(s.file_size)} · {timeAgo(s.created_at)}
+                      {s.scan_type} · {humanSize(s.file_size)} · {formatDate(s.created_at)} ({timeAgo(s.created_at)})
                     </p>
                   </div>
                   <div className="text-right">

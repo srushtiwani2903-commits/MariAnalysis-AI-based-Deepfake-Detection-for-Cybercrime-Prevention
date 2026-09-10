@@ -57,8 +57,8 @@ class User(db.Model):
             "is_verified": self.is_verified,
             "phone": self.phone,
             "phone_verified": self.phone_verified,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_login": self.last_login.isoformat() if self.last_login else None,
+            "created_at": _iso(self.created_at),
+            "last_login": _iso(self.last_login),
             "scan_count": self.scans.count(),
         }
 
@@ -125,7 +125,7 @@ class ScanHistory(db.Model):
             "fake_probability": self.fake_probability,
             "risk_level": self.risk_level,
             "processing_time_ms": self.processing_time_ms,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": _iso(self.created_at),
         }
         if include_full:
             data.update({
@@ -184,7 +184,7 @@ class Report(db.Model):
             "scan_id": self.scan_id,
             "format": self.format,
             "file_path": self.file_path,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": _iso(self.created_at),
         }
 
 
@@ -205,7 +205,7 @@ class Log(db.Model):
             "action": self.action,
             "details": self.details,
             "ip_address": self.ip_address,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": _iso(self.created_at),
         }
 
 
@@ -233,7 +233,7 @@ class EvidenceCase(db.Model):
             "platform": self.platform,
             "notes": self.notes,
             "report_hash": self.report_hash,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": _iso(self.created_at),
         }
 
 
@@ -290,6 +290,6 @@ class ApiKey(db.Model):
             "id": self.id,
             "label": self.label,
             "key_hash": self.key_hash[:16],
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_used": self.last_used.isoformat() if self.last_used else None,
+            "created_at": _iso(self.created_at),
+            "last_used": _iso(self.last_used),
         }

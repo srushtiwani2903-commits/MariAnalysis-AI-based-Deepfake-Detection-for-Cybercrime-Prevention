@@ -7,7 +7,7 @@ import {
 } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
 import api from "../api/api";
-import { humanSize, timeAgo } from "../utils/format";
+import { humanSize, timeAgo, formatDate } from "../utils/format";
 
 const FILTERS = ["all", "image", "video", "audio", "text"];
 const RESULTS = ["all", "fake", "authentic", "inconclusive"];
@@ -132,7 +132,7 @@ export default function History() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{s.filename}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      #{s.id} · {s.scan_type} · {humanSize(s.file_size)} · {timeAgo(s.created_at)}
+                      #{s.id} · {s.scan_type} · {humanSize(s.file_size)} · {formatDate(s.created_at)} ({timeAgo(s.created_at)})
                     </p>
                   </div>
                   <span className="font-mono text-sm font-bold text-neon-blue">

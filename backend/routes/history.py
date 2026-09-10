@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
-from models import Log, ScanHistory
+from models import Log, ScanHistory, _iso
 from utils.idps import audit
 
 history_bp = Blueprint("history", __name__)
@@ -58,7 +58,7 @@ def stats():
         "real_detected": real,
         "inconclusive": inconclusive,
         "accuracy": accuracy,
-        "last_scan_at": last.created_at.isoformat() if last else None,
+        "last_scan_at": _iso(last.created_at) if last else None,
         "last_result": last.to_dict() if last else None,
     })
 

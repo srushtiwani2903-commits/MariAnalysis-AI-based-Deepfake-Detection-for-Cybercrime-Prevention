@@ -12,7 +12,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from config import Config
 from extensions import db
-from models import BlockchainBlock, EvidenceCase, Log, ScanHistory
+from models import BlockchainBlock, EvidenceCase, Log, ScanHistory, _iso
 from services import blockchain
 from utils.idps import audit
 from utils.mailer import send_case_email
@@ -153,7 +153,7 @@ def _public_case_payload(case):
             "case_id": case.case_id,
             "status": case.status,
             "platform": case.platform,
-            "created_at": case.created_at.isoformat() if case.created_at else None,
+            "created_at": _iso(case.created_at),
             "report_hash": case.report_hash,
         },
         "scan": {

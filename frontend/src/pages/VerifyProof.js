@@ -5,6 +5,7 @@ import {
   CubeIcon, FingerPrintIcon, ShieldCheckIcon, XCircleIcon,
   CheckCircleIcon, MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
+import { formatDate } from "../utils/format";
 
 const API_URL = process.env.REACT_APP_API_URL || "/api";
 
@@ -116,7 +117,7 @@ export default function VerifyProof() {
                 <span className="text-slate-500 dark:text-slate-400">Platform</span>
                 <span className="font-medium">{caseInfo.platform || "—"}</span>
                 <span className="text-slate-500 dark:text-slate-400">Registered</span>
-                <span className="font-medium">{caseInfo.created_at ? new Date(caseInfo.created_at).toLocaleString() : "—"}</span>
+                <span className="font-medium">{caseInfo.created_at ? formatDate(caseInfo.created_at) : "—"}</span>
               </div>
               {data.scan && (
                 <div className="pt-2 border-t border-slate-200 dark:border-white/10">

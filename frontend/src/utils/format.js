@@ -36,9 +36,21 @@ export function humanSize(bytes) {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+// Backend always stores UTC. Older rows serialized by SQLite have no offset
+// marker, and JS parses offsetless ISO strings as *local* time — inflating
+// relative times by the viewer's UTC offset. Force UTC for offsetless strings.
+function toDate(iso) {
+  if (!iso) return null;
+  const hasOffset = /[zZ]|[+-]\d{2}:?(\d{2})?$/.test(iso);
+  const s = hasOffset ? iso : iso + "Z";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export function timeAgo(iso) {
-  if (!iso) return "—";
-  const diff = Date.now() - new Date(iso).getTime();
+  const d = toDate(iso);
+  if (!d) return "—";
+  const diff = Date.now() - d.getTime();
   const sec = Math.floor(diff / 1000);
   if (sec < 60) return "just now";
   const min = Math.floor(sec / 60);
@@ -47,12 +59,13 @@ export function timeAgo(iso) {
   if (hr < 24) return `${hr}h ago`;
   const day = Math.floor(hr / 24);
   if (day < 30) return `${day}d ago`;
-  return IST_DATE_FORMATTER.format(new Date(iso));
+  return IST_DATE_FORMATTER.format(d);
 }
 
 export function formatDate(iso) {
-  if (!iso) return "—";
-  return IST_FORMATTER.format(new Date(iso));
+  const d = toDate(iso);
+  if (!d) return "—";
+  return IST_FORMATTER.format(d);
 }
 
 export function riskColor(risk) {
