@@ -115,6 +115,13 @@ class Config:
     # scored against them. Disable with KAGGLE_REFERENCE_ENABLED=false.
     KAGGLE_REFERENCE_ENABLED = os.environ.get("KAGGLE_REFERENCE_ENABLED", "true").lower() == "true"
     KAGGLE_REFERENCE_SAMPLE_SIZE = int(os.environ.get("KAGGLE_REFERENCE_SAMPLE_SIZE", 10))
+    # Local real/fake image dataset used instead of a Kaggle download when a
+    # path is set (or auto-detected). Only image scans use it; it replaces the
+    # Kaggle sample fetch. Set empty to fall back to the Kaggle behaviour.
+    IMAGE_REFERENCE_DATASET_PATH = os.environ.get("IMAGE_REFERENCE_DATASET_PATH", "")
+    # How many images per class to use from the local dataset (all by default:
+    # the 140k face dataset has 70k real + 70k fake across train/test/valid).
+    IMAGE_REFERENCE_MAX_PER_CLASS = int(os.environ.get("IMAGE_REFERENCE_MAX_PER_CLASS", 70000))
 
     # --- Real AI model providers (Hybrid engine) ---
     # Gemini (Google AI Studio free key, https://aistudio.google.com/app/apikey):

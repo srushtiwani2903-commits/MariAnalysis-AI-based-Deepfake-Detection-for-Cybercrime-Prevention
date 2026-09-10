@@ -128,6 +128,12 @@ class KaggleReference:
             logger.warning("Kaggle reference build failed (%s): %s", media_type, exc)
 
     def _build_profile(self, media_type):
+        # Local dataset mode (image scans compare against a real/fake folder
+        # you already have on disk instead of hitting Kaggle).
+        local_root = _local_dataset_root(media_type)
+        if local_root:
+            return self._build_profile_from_local(media_type, local_root)
+
         from ml.kaggle_pipeline import resolve_credentials, write_kaggle_json
 
         # Force credentials resolution so the Kaggle client is authenticated.
@@ -155,6 +161,88 @@ class KaggleReference:
             raise RuntimeError("Not enough labelled samples fetched from Kaggle.")
         return profile
 
+    def _build_profile_from_local(self, media_type, root):
+        """Build per-class feature stats from a local real/fake folder set.
+
+        ``root`` should contain ``real/`` and ``fake/`` subfolders (optionally
+        train/test/valid splits whose basenames are also matched). Uses up to
+        IMAGE_REFERENCE_MAX_PER_CLASS images per class.
+        """
+        keys = _KEYS_BY_MEDIA.get(media_type, _KEYS_BY_MEDIA[_DEFAULT_MEDIA])
+        max_per_class = getattr(Config, "IMAGE_REFERENCE_MAX_PER_CLASS", 50000)
+
+        def _collect(dirs):
+            """Yield image paths up to max_per_class per class."""
+            counts = {"real": 0, "fake": 0}
+            for d in sorted(dirs):
+                if not os.path.isdir(d):
+                    continue
+                cls = _label_dir(os.path.basename(d).lower(), media_type)
+                if cls not in counts or counts[cls] >= max_per_class:
+                    continue
+                for name in sorted(os.listdir(d)):
+                    if counts[cls] >= max_per_class:
+                        break
+                    full = os.path.join(d, name)
+                    if not os.path.isfile(full):
+                        continue
+                    if os.path.splitext(name)[1].lower() not in _IMAGE_EXTS:
+                        continue
+                    yield cls, full
+                    counts[cls] += 1
+
+        # Look for real/ + fake/ in the root itself and in split-like subfolders.
+        seeds = []
+
+        def _scan(folder):
+            if os.path.isfile(folder):
+                return
+            for sub in os.listdir(folder):
+                abs_sub = os.path.join(folder, sub)
+                if os.path.isdir(abs_sub) and _label_dir(sub, media_type):
+                    # real/ or fake/ directly
+                    seeds.append(abs_sub)
+                    for inner in os.listdir(abs_sub):
+                        inner_path = os.path.join(abs_sub, inner)
+                        if os.path.isdir(inner_path) and _label_dir(inner, media_type):
+                            seeds.append(inner_path)
+                elif os.path.isdir(abs_sub):
+                    _scan(abs_sub)
+
+        _scan(root)
+        seeds = [s for s in seeds if os.path.isdir(s)]
+
+        real_dirs = [s for s in seeds if _label_dir(os.path.basename(s), media_type) == "real"]
+        fake_dirs = [s for s in seeds if _label_dir(os.path.basename(s), media_type) == "fake"]
+        if not real_dirs or not fake_dirs:
+            raise RuntimeError(
+                f"No real/ and fake/ folders found under local dataset root: {root}")
+
+        profile = _Profile(f"local:{root}")
+        total = 0
+        for cls, dirs in (("real", real_dirs), ("fake", fake_dirs)):
+            vectors = []
+            for _cls, path in _collect(dirs):
+                vectors.append(_features(path, media_type))
+            vectors = [v for v in vectors if v is not None]
+            profile.samples[cls] = len(vectors)
+            stats = defaultdict(list)
+            for v in vectors:
+                for key in keys:
+                    stats[key].append(v[key])
+            profile.classes[cls] = {
+                key: _mean_std(values) for key, values in stats.items()
+            }
+            total += profile.samples[cls]
+            logger.info("Local reference %s: %d %s images profiled.",
+                        media_type, profile.samples[cls], cls)
+        if profile.samples.get("fake", 0) < 5 or profile.samples.get("real", 0) < 5:
+            raise RuntimeError("Not enough labelled samples in local dataset "
+                               f"{root} (real={profile.samples.get('real', 0)}, "
+                               f"fake={profile.samples.get('fake', 0)}).")
+        logger.info("Local reference profile built from %d images in %s.", total, root)
+        return profile
+
 
 def _reference_slug(media_type=_DEFAULT_MEDIA):
     from ml.data_config import get_registry
@@ -163,6 +251,75 @@ def _reference_slug(media_type=_DEFAULT_MEDIA):
         if entry["media"] == media_type:
             return entry["slug"]
     raise RuntimeError(f"No {media_type} dataset configured in the Kaggle registry.")
+
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+
+
+def _label_dir(folder, media_type=_DEFAULT_MEDIA):
+    """Classify a folder basename as real / fake / unknown."""
+    folder = (folder or "").lower()
+    if any(tok in folder for tok in _REAL_TOKENS):
+        return "real"
+    if any(tok in folder for tok in _FAKE_TOKENS):
+        return "fake"
+    if media_type == "audio" and folder and folder not in _NEUTRAL_FOLDERS:
+        return "fake"
+    return None
+
+
+def _local_dataset_root(media_type=_DEFAULT_MEDIA):
+    """Return a local dataset folder with real/+fake/ inside, or None.
+
+    Explicit ``IMAGE_REFERENCE_DATASET_PATH`` wins; otherwise the standard
+    Kaggle cache + common dataset locations are probed (no deep walks).
+    """
+    if media_type != "image":
+        return None
+
+    configured = getattr(Config, "IMAGE_REFERENCE_DATASET_PATH", "") or ""
+    candidates = [configured] if configured.strip() else []
+
+    tmp_root = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+    # Known locations where real-vs-fake face datasets tend to live. The parent
+    # "real-vs-fake" folder is preferred so all splits (train/test/valid) are
+    # scanned, not just train.
+    candidates += [
+        os.path.join(tmp_root, "Temp", "opencode", "df_download",
+                     "140k face detection datasets", "real_vs_fake", "real-vs-fake"),
+        os.path.join(tmp_root, "Temp", "opencode", "df_download",
+                     "140k face detection datasets", "real_vs_fake", "real-vs-fake", "train"),
+        os.path.join(os.path.expanduser("~"), ".cache", "kagglehub", "datasets"),
+        os.path.join(Config.BASE_DIR, "ml", "datasets"),
+        os.path.join(Config.BASE_DIR, "models", "datasets"),
+    ]
+
+    for root in candidates:
+        if root and os.path.isdir(root) and _real_fake_folders_exist(root):
+            logger.info("Using local image reference dataset: %s", root)
+            return root
+    return None
+
+
+def _real_fake_folders_exist(root, depth=3):
+    """True when the folder (or its split subfolders) contains real/ + fake/."""
+    try:
+        entries = os.listdir(root)
+    except OSError:
+        return False
+    direct_real = any(_label_dir(e) == "real" for e in entries)
+    direct_fake = any(_label_dir(e) == "fake" for e in entries)
+    if direct_real and direct_fake:
+        return True
+    if depth <= 0:
+        return False
+    # Look one level deeper (e.g. Kaggle-style train/test/valid splits).
+    for entry in entries:
+        sub = os.path.join(root, entry)
+        if os.path.isdir(sub) and not os.path.islink(sub):
+            if _real_fake_folders_exist(sub, depth - 1):
+                return True
+    return False
 
 
 # Parent-folder keywords used to split a raw Kaggle dataset into class labels.
