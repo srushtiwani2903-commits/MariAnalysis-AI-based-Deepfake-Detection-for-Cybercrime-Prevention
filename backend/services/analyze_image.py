@@ -39,6 +39,197 @@ def _error_level_analysis(image, quality=90):
     return rms, diff
 
 
+def _multi_quality_ela(image):
+    """Run ELA at multiple JPEG quality levels and return composite metrics.
+
+    AI-generated images tend to compress very uniformly across quality levels,
+    while real photos show more variance. This catches images that slip through
+    a single-quality ELA check.
+    """
+    results = {}
+    for q in [75, 85, 95]:
+        buf = io.BytesIO()
+        image.convert("RGB").save(buf, format="JPEG", quality=q)
+        buf.seek(0)
+        recompressed = Image.open(buf).convert("RGB")
+        diff = ImageChops.difference(image.convert("RGB"), recompressed)
+        stat = ImageStat.Stat(diff)
+        rms = sum(stat.mean) / 3.0
+        results[q] = rms
+
+    # If ELA is suspiciously similar across all quality levels, it's likely synthetic
+    rms_values = list(results.values())
+    mean_rms = sum(rms_values) / len(rms_values)
+    variance = sum((r - mean_rms) ** 2 for r in rms_values) / len(rms_values)
+
+    # Low variance across quality levels = synthetic source
+    quality_consistency = max(0.0, min(1.0, 1.0 - (variance ** 0.5) / 5.0))
+
+    return mean_rms, quality_consistency, results
+
+
+def _frequency_analysis(image):
+    """Detect GAN/diffusion model artifacts via FFT spectral analysis.
+
+    AI-generated images often show characteristic periodic patterns in the
+    frequency domain — specific frequency bands are unnaturally suppressed
+    or amplified, and the spectral envelope lacks the natural falloff of
+    camera-captured images.
+    """
+    try:
+        import numpy as np
+
+        # Convert to grayscale numpy array
+        gray = np.asarray(image.convert("L"), dtype=np.float64)
+
+        # Apply 2D FFT
+        f_transform = np.fft.fft2(gray)
+        f_shift = np.fft.fftshift(f_transform)
+        magnitude = np.abs(f_shift)
+
+        h, w = magnitude.shape
+        cy, cx = h // 2, w // 2
+
+        # Create radial distance map from center
+        y, x = np.ogrid[:h, :w]
+        r = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+        max_r = min(cy, cx)
+
+        # Compute radial power spectrum (average magnitude per ring)
+        rings = 20
+        radial_power = []
+        for i in range(rings):
+            inner = (i / rings) * max_r
+            outer = ((i + 1) / rings) * max_r
+            mask = (r >= inner) & (r < outer)
+            if mask.any():
+                radial_power.append(float(np.mean(magnitude[mask])))
+            else:
+                radial_power.append(0.0)
+
+        total_power = sum(radial_power)
+        if total_power < 1e-10:
+            return {"spectral_anomaly": 0.5, "high_freq_ratio": 0.5,
+                    "spectral_peaks": 0, "radial_entropy": 0.5}
+
+        # Normalize
+        radial_norm = [p / total_power for p in radial_power]
+
+        # High-frequency ratio: real images have more high-freq content
+        high_freq_end = rings // 2
+        high_freq_ratio = sum(radial_norm[high_freq_end:]) / max(1e-10, sum(radial_norm))
+
+        # Spectral peaks: AI images may have periodic artifacts (sharp spikes)
+        mean_power = sum(radial_norm) / len(radial_norm)
+        peaks = sum(1 for p in radial_norm if p > mean_power * 2.5)
+
+        # Radial entropy: real images have higher entropy in radial spectrum
+        import math
+        radial_entropy = -sum(
+            p * math.log(p + 1e-10, 2) for p in radial_norm if p > 0
+        ) / math.log(rings, 2) if any(p > 0 for p in radial_norm) else 0
+
+        # AI-generated images typically have:
+        # - Missing high-frequency content (too smooth, plastic-like)
+        # - A steeper spectral slope (unnatural power falloff)
+        # - Periodic artifacts (GAN checkerboard)
+        # Use STRICT thresholds to avoid false positives on real photos,
+        # which also have low high-freq content after compression but DO
+        # retain a natural textured pattern in the mid frequencies.
+        anomaly_score = 0.0
+        if high_freq_ratio < 0.15:
+            anomaly_score += 0.35  # extremely smooth (rare in real photos)
+        elif high_freq_ratio < 0.22:
+            anomaly_score += 0.15  # mild lack of detail (only counts if other signals agree)
+        if peaks >= 5:
+            anomaly_score += 0.35  # strong periodic artifacts
+        elif peaks >= 3:
+            anomaly_score += 0.15  # mild periodicity
+        mid_energy = sum(radial_norm[5:10])
+        low_energy = sum(radial_norm[0:3])
+        if low_energy > 0 and mid_energy / low_energy > 0.35:
+            anomaly_score += 0.20  # unnatural mid-freq spike
+
+        # Radial entropy: real images have higher entropy in the radial spectrum.
+        # Only counts as anomaly when it is VERY low (very uniform energy shape).
+        if radial_entropy < 0.55:
+            anomaly_score += 0.20
+
+        anomaly_score = max(0.0, min(1.0, anomaly_score))
+
+        return {
+            "spectral_anomaly": round(anomaly_score, 4),
+            "high_freq_ratio": round(max(0.0, min(1.0, high_freq_ratio)), 4),
+            "spectral_peaks": peaks,
+            "radial_entropy": round(max(0.0, min(1.0, radial_entropy)), 4),
+        }
+    except Exception:
+        return {"spectral_anomaly": 0.0, "high_freq_ratio": 0.5,
+                "spectral_peaks": 0, "radial_entropy": 0.5}
+
+
+def _noise_pattern_analysis(image):
+    """Analyze noise patterns to detect AI-generated content.
+
+    Real camera images have sensor noise that follows a characteristic pattern
+    (slightly higher in blue channel, spatially correlated near edges).
+    AI-generated images have either no noise or artificially uniform noise
+    that lacks these natural patterns.
+    """
+    try:
+        import numpy as np
+
+        arr = np.asarray(image, dtype=np.float64)
+
+        # Estimate noise by subtracting a median-filtered version
+        from PIL import ImageFilter
+        smoothed = image.filter(ImageFilter.MedianFilter(3))
+        smooth_arr = np.asarray(smoothed, dtype=np.float64)
+        noise = arr - smooth_arr
+
+        # Noise level per channel
+        noise_std = [float(np.std(noise[:, :, c])) for c in range(3)]
+
+        # Channel variance: real cameras have slightly more noise in blue
+        # AI generators tend to have equal noise across channels
+        ch_mean = sum(noise_std) / 3.0
+        ch_variance = sum((n - ch_mean) ** 2 for n in noise_std) / 3.0
+        channel_uniformity = 1.0 - min(1.0, (ch_variance ** 0.5) / 5.0)
+
+        # Spatial correlation: real noise is spatially correlated (not pure white noise)
+        # Compute autocorrelation at lag 1 for each channel
+        autocorr_vals = []
+        for c in range(3):
+            n = noise[:, :, c].flatten()
+            if len(n) > 1:
+                corr = float(np.corrcoef(n[:-1], n[1:])[0, 1])
+                autocorr_vals.append(abs(corr))
+        spatial_correlation = sum(autocorr_vals) / max(1, len(autocorr_vals))
+
+        # AI images: uniform noise across channels + low spatial correlation.
+        # STRICT thresholds: compressed real photos also have low noise, so
+        # only flag when the noise signature is unmistakably synthetic.
+        noise_anomaly = 0.0
+        if channel_uniformity > 0.93:
+            noise_anomaly += 0.4  # noise identical across all channels (rare in real)
+        if spatial_correlation < 0.05:
+            noise_anomaly += 0.3  # pure white noise (no sensor correlation)
+        if ch_mean < 0.5:
+            noise_anomaly += 0.3  # essentially NO noise whatsoever
+
+        noise_anomaly = max(0.0, min(1.0, noise_anomaly))
+
+        return {
+            "noise_anomaly": round(noise_anomaly, 4),
+            "noise_level": round(ch_mean, 2),
+            "noise_uniformity": round(channel_uniformity, 4),
+            "noise_spatial_corr": round(spatial_correlation, 4),
+        }
+    except Exception:
+        return {"noise_anomaly": 0.0, "noise_level": 5.0,
+                "noise_uniformity": 0.5, "noise_spatial_corr": 0.3}
+
+
 def _save_heatmap(diff, seed_hex):
     """Persist a heatmap PNG (red = manipulated regions) and return its name."""
     try:
@@ -124,6 +315,27 @@ def _extract_metadata(path):
             name = TAGS.get(tag_id, str(tag_id))
             meta[name] = str(value)[:120]
         meta["has_exif"] = bool(exif)
+
+        # Check for AI generator software tags in metadata
+        AI_GENERATORS = [
+            "stable diffusion", "midjourney", "dall-e", "dalle", "craiyon",
+            "nightcafe", "deepai", "artbreeder", "thispersondoesnotexist",
+            "generated", "synthetic", "ai ", "dreamstudio", "leonardo.ai",
+            "flux", "sdxl", "comfyui", "automatic1111", "a1111", "invoke",
+            "fooocus", "sd ", "kandinsky", "ideogram", "playground",
+        ]
+        meta_str = " ".join(str(v).lower() for v in meta.values())
+        detected_ai_tools = [tool for tool in AI_GENERATORS if tool in meta_str]
+        meta["ai_generator_detected"] = detected_ai_tools
+        meta["has_ai_generator_tag"] = bool(detected_ai_tools)
+
+        # Check for typical camera metadata
+        CAMERA_TAGS = ["Make", "Model", "DateTime", "DateTimeOriginal",
+                       "Software", "LensModel", "FocalLength", "ISOSpeedRatings",
+                       "ExposureTime", "FNumber"]
+        has_camera_meta = any(tag in meta for tag in CAMERA_TAGS)
+        meta["has_camera_metadata"] = has_camera_meta
+
     except Exception:
         meta = {"error": "unable to read metadata"}
     return meta
@@ -206,10 +418,19 @@ def analyze_image(file_path, filename, size_bytes):
     texture_score = shared["texture_uniformity"]
     # Missing or stripped metadata is mildly suspicious.
     meta_score = 0.0 if meta.get("has_exif") else 0.35
+    # AI generator software tags in metadata are strong indicators.
+    if meta.get("has_ai_generator_tag"):
+        meta_score = max(meta_score, 0.85)
     # Being too similar after lossy recompression suggests a synthetic source.
     recomp_score = shared["recompression_similarity"]
     # Low color variance reads flat / uncanny.
     flatness = shared["color_flatness"]
+
+    # Run advanced analyses
+    _mq_ela_rms, quality_consistency, _mq_results = _multi_quality_ela(img)
+    spectral = _frequency_analysis(img)
+    noise = _noise_pattern_analysis(img)
+
     # Face heuristics only apply when a face is present.
     if face["faces_detected"]:
         face_score = (1.0 - face["face_consistency"]) * 0.6 + (1.0 - face["eye_blink_pattern"]) * 0.4
@@ -220,14 +441,25 @@ def analyze_image(file_path, filename, size_bytes):
         lighting_score = 0.0
         face_weight = 0.0
 
+    # Composite advanced scores
+    spectral_score = spectral["spectral_anomaly"]
+    noise_score = noise["noise_anomaly"]
+
     features = {
         "error_level_analysis": round(ela_score, 4),
         "ela_local_variance": round(ela_local_variance, 4),
+        "ela_quality_consistency": round(quality_consistency, 4),
         "texture_uniformity": round(texture_score, 4),
         "metadata_anomaly": round(meta_score, 4),
         "recompression_similarity": round(recomp_score, 4),
         "color_flatness": round(flatness, 4),
         "histogram_entropy": round(shared["histogram_entropy"], 3),
+        "spectral_anomaly": round(spectral_score, 4),
+        "high_freq_ratio": round(spectral["high_freq_ratio"], 4),
+        "spectral_peaks": spectral["spectral_peaks"],
+        "noise_anomaly": round(noise_score, 4),
+        "noise_level": round(noise["noise_level"], 2),
+        "noise_uniformity": round(noise["noise_uniformity"], 4),
         "face_consistency": round(face["face_consistency"], 4),
         "eye_blink_pattern": round(face["eye_blink_pattern"], 4),
         "lighting_consistency": round(face["lighting_consistency"], 4),
@@ -235,15 +467,54 @@ def analyze_image(file_path, filename, size_bytes):
         "resolution": f"{img.width}x{img.height}",
     }
 
+    # UPDATED: Balanced weight distribution for AI-generated detection
+    # Spectral/noise signals get moderate weight. Real camera photos with
+    # EXIF metadata are DAMPENED so they don't false-positive.
+    is_real_camera = bool(meta.get("has_camera_metadata")) and bool(meta.get("has_exif"))
+    if is_real_camera:
+        # Real camera photo: spectral/noise signals are unreliable.
+        # Real camera images often lack high-freq detail after compression.
+        spectral_effective = spectral_score * 0.35
+        noise_effective = noise_score * 0.30
+    else:
+        spectral_effective = spectral_score
+        noise_effective = noise_score
+
     base = (
-        0.28 * ela_score
-        + 0.20 * texture_score
-        + 0.16 * recomp_score
-        + 0.14 * meta_score
-        + 0.14 * flatness
-        + 0.08 * face_score
+        0.16 * ela_score           # ELA - catches manipulation (high ELA)
+        + 0.18 * texture_score     # Smooth textures = synthetic (most reliable)
+        + 0.13 * recomp_score      # Too-clean recompression
+        + 0.10 * meta_score        # Missing EXIF / AI tags
+        + 0.06 * flatness          # Color flatness
+        + 0.05 * face_score        # Face heuristics
+        + 0.17 * spectral_effective  # frequency domain artifacts
+        + 0.11 * noise_effective     # unnatural noise patterns
     )
     base = max(0.0, min(1.0, base + (lighting_score * 0.03 if face_weight else 0.0)))
+
+    # ---------------------- AI signal agreement bonus ----------------------- #
+    # Only trigger when STRONG signals agree. A compressed real photo will
+    # have low ELA but will NOT trigger spectral/noise/texture simultaneously,
+    # so it won't get the boost.
+    ai_signals = 0
+    if spectral_score >= 0.5 and not is_real_camera:
+        ai_signals += 1
+    if noise_score >= 0.5 and not is_real_camera:
+        ai_signals += 1
+    if texture_score >= 0.75:
+        ai_signals += 1
+    if recomp_score >= 0.80:
+        ai_signals += 1
+    if ela_score <= 0.08:
+        ai_signals += 1
+    if meta.get("has_ai_generator_tag"):
+        ai_signals += 2  # Strong signal
+
+    # Boost only when 4+ signals agree (genuine AI output)
+    if ai_signals >= 5:
+        base = min(1.0, base + 0.18)  # Very strong boost
+    elif ai_signals >= 4:
+        base = min(1.0, base + 0.10)  # Strong boost
 
     # ----------------------- Kaggle reference blend ------------------------ #
     # Blend with the Kaggle reference profile when it agrees with the
@@ -354,9 +625,9 @@ def _entropy(counts):
 
 
 def _interpret(prob):
-    if prob >= 65:
+    if prob >= 60:
         return "fake", "high"
-    if prob >= 45:
+    if prob >= 42:
         return "inconclusive", "medium"
     return "authentic", "low"
 

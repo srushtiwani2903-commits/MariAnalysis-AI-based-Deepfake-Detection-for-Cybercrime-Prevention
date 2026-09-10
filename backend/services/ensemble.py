@@ -51,7 +51,7 @@ def _seed(name, filename):
 
 
 def _interpret(prob):
-    if prob >= 62:
+    if prob >= 60:
         return "fake", "high"
     if prob >= 42:
         return "inconclusive", "medium"
@@ -127,26 +127,40 @@ def classify_ai_origin(media_type, features, fake_probability):
     Returns one of: ``authentic``, ``ai_generated`` (created entirely by AI)
     or ``ai_manipulated`` (authentic media converted/edited with AI tools).
     """
-    if fake_probability < 62:
+    if fake_probability < 50:
         return "authentic"
 
     if media_type == "image":
         # Fully synthetic: overly smooth textures, too-clean recompression,
-        # near-zero ELA error and low entropy.
+        # near-zero ELA error, low entropy, AND spectral/noise anomalies.
         synthetic = (
-            features.get("texture_uniformity", 0) >= 0.75
-            and features.get("recompression_similarity", 0) >= 0.8
-            and features.get("error_level_analysis", 1) <= 0.06
-            and features.get("histogram_entropy", 8) <= 7.0
+            features.get("texture_uniformity", 0) >= 0.65
+            and features.get("recompression_similarity", 0) >= 0.70
+            and features.get("error_level_analysis", 1) <= 0.15
+            and features.get("histogram_entropy", 8) <= 7.5
+        )
+        # Strong synthetic signal: spectral anomaly + noise anomaly + low ELA
+        synthetic_v2 = (
+            features.get("spectral_anomaly", 0) >= 0.35
+            and features.get("noise_anomaly", 0) >= 0.25
+            and features.get("error_level_analysis", 1) <= 0.18
         )
         # AI-tool conversion (face-swap / inpainting / enhancement) shows up as
         # localised ELA hotspots spread across the frame.
-        manipulated = features.get("ela_local_variance", 0) >= 0.35
-        if synthetic:
+        manipulated = features.get("ela_local_variance", 0) >= 0.30
+        # Additional manipulation signal: high spectral peaks (periodic artifacts)
+        manipulated_v2 = (
+            features.get("spectral_peaks", 0) >= 2
+            and features.get("error_level_analysis", 1) <= 0.20
+        )
+        if synthetic or synthetic_v2:
             return "ai_generated"
-        if manipulated:
+        if manipulated or manipulated_v2:
             return "ai_manipulated"
-        return "ai_generated" if features.get("error_level_analysis", 1) <= 0.03 else "ai_manipulated"
+        # Weak signal: very low ELA alone suggests synthetic
+        if features.get("error_level_analysis", 1) <= 0.05:
+            return "ai_generated"
+        return "ai_manipulated"
 
     if media_type == "video":
         # Generated video: a face is present in almost every sampled frame and
@@ -232,9 +246,12 @@ _REASON_SPECS = {
     "image": [
         ("error_level_analysis", "Error-level consistency", "low_is_bad"),
         ("ela_local_variance", "No localised AI editing artifacts", "low_is_bad"),
+        ("ela_quality_consistency", "Natural JPEG quality variance", "low_is_bad"),
         ("texture_uniformity", "Natural texture variance", "low_is_bad"),
         ("recompression_similarity", "Recompression similarity", "low_is_bad"),
         ("metadata_anomaly", "Metadata completeness", "low_is_bad"),
+        ("spectral_anomaly", "Frequency domain analysis", "low_is_bad"),
+        ("noise_anomaly", "Natural noise patterns", "low_is_bad"),
         ("face_consistency", "Face boundary consistency", "low_is_bad"),
         ("eye_blink_pattern", "Natural eye-blinking pattern", "low_is_bad"),
         ("lighting_consistency", "Consistent lighting", "low_is_bad"),
