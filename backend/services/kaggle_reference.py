@@ -3,7 +3,10 @@
 On first use it pulls a small sample of real + fake media (images or audio)
 from Kaggle into a temp dir (auto-deleted), builds per-class feature
 distributions, and scores later scans against them. The profiles are cached
-in-process, so webcam, URL and repeated scans never re-download.
+in-process, so webcam, URL and repeated scans never re-download. When a local
+real/fake image dataset is present on disk (see Config.IMAGE_REFERENCE_DATASET_PATH)
+the image profile is built from ALL of those images and cached to disk, so the
+full dataset is used for every image scan without re-building on each restart.
 
 Usage:
     from services.kaggle_reference import kaggle_reference
@@ -11,6 +14,7 @@ Usage:
     ref = kaggle_reference.score(features)           # image features (default)
     ref = kaggle_reference.score(features, media_type="audio")
 """
+import json
 import logging
 import os
 import tempfile
@@ -51,6 +55,39 @@ class _Profile:
         self.classes = {}   # "real" / "fake" -> {feature: (mean, std)}
         self.samples = {}   # "real" / "fake" -> n
 
+    # ------------------------------------------------ persistence
+    def to_dict(self):
+        return {
+            "slug": self.slug,
+            "created_at": self.created_at,
+            "samples": dict(self.samples),
+            "classes": {
+                cls: {feat: list(stats) for feat, stats in class_stats.items()}
+                for cls, class_stats in self.classes.items()
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        profile = cls(data["slug"])
+        profile.created_at = data.get("created_at", time.time())
+        profile.samples = dict(data.get("samples", {}))
+        profile.classes = {
+            cls: {
+                feat: (tuple(v) if isinstance(v, list) else v)
+                for feat, v in class_stats.items()
+            }
+            for cls, class_stats in data.get("classes", {}).items()
+        }
+        return profile
+
+
+def _profile_cache_path(media_type):
+    """Disk cache location for a local reference profile."""
+    folder = os.path.join(Config.BASE_DIR, "ml", "datasets", "_reference_cache")
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, f"{media_type}_profile.json")
+
 
 class KaggleReference:
     def __init__(self):
@@ -59,6 +96,25 @@ class KaggleReference:
         self._error = {}        # media_type -> message
         self._lock = threading.Lock()
         self._cache = {}
+        self._load_disk_cache()
+
+    def _load_disk_cache(self):
+        """Load any previously built local reference profile from disk."""
+        for media_type in (m for m in _KEYS_BY_MEDIA):  # noqa: C416
+            path = _profile_cache_path(media_type)
+            try:
+                if os.path.isfile(path):
+                    with open(path, "r", encoding="utf-8") as fh:
+                        profile = _Profile.from_dict(json.load(fh))
+                    # Only auto-load the cache when it matches the local dataset
+                    # source; otherwise ignore it (will rebuild).
+                    if _is_local_source(profile.slug):
+                        self._profiles[media_type] = profile
+                        self._status[media_type] = "ready"
+                        logger.info("Loaded cached local reference profile (%s).",
+                                    profile.slug)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not load reference cache %s: %s", path, exc)
 
     # ------------------------------------------------------------------ API
     @property
@@ -119,6 +175,7 @@ class KaggleReference:
             with self._lock:
                 self._profiles[media_type] = profile
                 self._status[media_type] = "ready"
+            self._save_disk_cache(profile, media_type)
             logger.info("Kaggle reference profile ready (dataset=%s, media=%s).",
                         profile.slug, media_type)
         except Exception as exc:  # noqa: BLE001
@@ -126,6 +183,17 @@ class KaggleReference:
             with self._lock:
                 self._status[media_type] = "error"
             logger.warning("Kaggle reference build failed (%s): %s", media_type, exc)
+
+    def _save_disk_cache(self, profile, media_type):
+        """Persist a local (non-Kaggle) profile so restarts skip the rebuild."""
+        try:
+            if _is_local_source(profile.slug):
+                path = _profile_cache_path(media_type)
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(profile.to_dict(), fh)
+                logger.info("Saved local reference profile to %s", path)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not save reference cache: %s", exc)
 
     def _build_profile(self, media_type):
         # Local dataset mode (image scans compare against a real/fake folder
@@ -242,6 +310,11 @@ class KaggleReference:
                                f"fake={profile.samples.get('fake', 0)}).")
         logger.info("Local reference profile built from %d images in %s.", total, root)
         return profile
+
+
+def _is_local_source(slug):
+    """True when a profile slug points at a local dataset (not a Kaggle slug)."""
+    return isinstance(slug, str) and slug.startswith("local:")
 
 
 def _reference_slug(media_type=_DEFAULT_MEDIA):
