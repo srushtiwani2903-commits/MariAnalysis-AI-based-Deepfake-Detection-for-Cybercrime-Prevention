@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   CloudArrowUpIcon,
   DocumentTextIcon,
-  CheckCircleIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
+  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 
 const formatSize = (maxMB) =>
@@ -30,8 +30,6 @@ export default function FileUpload({
 
   useEffect(() => {
     if (!file) return;
-    // Simulated upload progress. Only keyed on `file`: including `uploading`
-    // here would make the re-render clear the interval and stall at 0%.
     setUploading(true);
     setProgress(0);
     const interval = setInterval(() => {
@@ -39,7 +37,6 @@ export default function FileUpload({
         if (p >= 100) {
           clearInterval(interval);
           setUploading(false);
-          onFileRef.current?.(file);
           return 100;
         }
         return p + Math.random() * 14 + 6;
@@ -83,7 +80,7 @@ export default function FileUpload({
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={onDrop}
-        onClick={() => !uploading && inputRef.current?.click()}
+        onClick={() => !uploading && !file && inputRef.current?.click()}
         whileHover={{ scale: 1.005 }}
         animate={drag ? { scale: 1.02 } : { scale: 1 }}
         className={`relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center
@@ -96,6 +93,9 @@ export default function FileUpload({
         <p className="font-semibold text-lg">{drag ? "Release to upload" : label}</p>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
           {hint || `Click or drag & drop · Max ${formatSize(maxMB)} · ${accept}`}
+        </p>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+          File will be ready to scan after upload
         </p>
         <input
           ref={inputRef}
@@ -142,12 +142,21 @@ export default function FileUpload({
                 </div>
                 <p className="text-xs text-center mt-1 font-mono">{Math.round(progress)}%</p>
               </div>
-            ) : file ? (
-              <span className="text-emerald-400"><CheckCircleIcon className="w-6 h-6" /></span>
+            ) : !uploading && progress >= 100 ? (
+              <button
+                onClick={() => onFileRef.current?.(file)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm
+                  bg-gradient-to-r from-neon-blue to-neon-purple text-white
+                  hover:shadow-lg hover:shadow-neon-blue/25 transition-all duration-200
+                  active:scale-95"
+              >
+                <MagnifyingGlassIcon className="w-5 h-5" />
+                Scan
+              </button>
             ) : null}
 
             <button
-              onClick={() => setFile(null)}
+              onClick={() => { setFile(null); setProgress(0); }}
               className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-400 transition-colors"
               aria-label="Remove file"
             >
