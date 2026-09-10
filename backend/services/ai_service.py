@@ -49,11 +49,30 @@ class AIService:
         if "error" not in result:
             result["model_version"] = "1.0.0"
             result["total_pipeline_ms"] = int((time.time() - started) * 1000)
-            result["reference_dataset"] = _REFERENCE_DATASETS.get(media_type, "")
-            result["reference_source"] = "kaggle"
+            result["reference_dataset"] = self._reference_identity(media_type)["dataset"]
+            result["reference_source"] = self._reference_identity(media_type)["source"]
             result["kaggle_reference_status"] = self._kaggle_status()
             result["explainable_ai"] = self._build_xai(result)
         return result
+
+    @staticmethod
+    def _reference_identity(media_type: str) -> dict:
+        """Report which reference dataset backs image scans (local vs Kaggle).
+
+        When a local real/fake dataset folder resolves, image scans reference
+        it (no Kaggle download); everything else still reports the Kaggle slug.
+        """
+        try:
+            from services.kaggle_reference import _local_dataset_root
+            root = _local_dataset_root(media_type)
+            if root:
+                return {"dataset": f"local:{root}", "source": "local"}
+        except Exception:  # noqa: BLE001
+            pass
+        return {
+            "dataset": _REFERENCE_DATASETS.get(media_type, ""),
+            "source": "kaggle",
+        }
 
     @staticmethod
     def _kaggle_status():
