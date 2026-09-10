@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 
 // Per-model verdict table for the multi-model ensemble.
 export default function MultiModelVerdicts({ models }) {
-  if (!models || models.length === 0) return null;
+  if (!Array.isArray(models) || models.length === 0) return null;
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10">
       <div className="grid grid-cols-3 gap-px bg-slate-200 dark:bg-white/10 text-[11px] uppercase tracking-wider">
