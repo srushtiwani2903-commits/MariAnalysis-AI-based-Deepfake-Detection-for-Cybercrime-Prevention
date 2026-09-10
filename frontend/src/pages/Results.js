@@ -26,6 +26,7 @@ export default function Results() {
   const [scan, setScan] = useState(location.state?.result || null);
   const [full, setFull] = useState(null);
   const [loading, setLoading] = useState(!scan);
+  const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [proof, setProof] = useState(null);
   const [proofError, setProofError] = useState("");
