@@ -9,6 +9,20 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+def _iso(dt):
+    """Serialize a datetime as ISO-8601 with an explicit UTC offset marker.
+
+    SQLite strips tzinfo when storing aware datetimes, so values read back are
+    naive. Without the marker, browsers parse the offsetless string as *local*
+    time, inflating relative times by the viewer's UTC offset (e.g. +5h30m for
+    IST). Tagging naive values as UTC keeps the instant unambiguous."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.isoformat() + "+00:00"
+    return dt.isoformat()
+
+
 class User(db.Model):
     __tablename__ = "users"
 
