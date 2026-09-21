@@ -344,6 +344,25 @@ When enabled, `backend/services/cnn_detector.py` loads the checkpoint once
 a `cnn_model` payload (fake probability, confidence, per-class probabilities,
 latency). Without the weights the app degrades silently to heuristics-only.
 
+### Video frame-CNN (included in the repo — works out of the box)
+
+The trained real-vs-fake **video frame model** ships in the repository at
+`backend/models/video_real_vs_fake_cnn.pt` (EfficientNet-B0, `val_accuracy
+1.0` on the pipeline frame-set) — unlike the image CNN you do **not** need to
+train anything to get CNN-backed video detection.
+
+* Set `VIDEO_MODEL_ENABLED=true` in `backend/.env` (see `.env.example`) and
+  every video scan runs `backend/services/video_detector.py`: it samples
+  `VIDEO_FRAME_SAMPLE_SIZE` evenly spaced frames, predicts each with the
+  checkpoint (same ImageNet preprocessing as training), and blends the mean
+  fake probability (`VIDEO_CNN_WEIGHT`, default 0.40) into the verdict.
+* The ensemble's "Temporal CNN" slot votes with the real network output,
+  results use engine `video-frame-cnn-v1`, and the XAI reason + `video_cnn`
+  payload include the frame-level fake probability and the model's
+  `val_accuracy`.
+* Retrain/replace the weights anytime with `ml/train_video_cnn_kaggle.py`
+  (per-video majority-vote accuracy is evaluated in `outputs/video_metrics.json`).
+
 ### How the heuristic engines work
 
 - **Image**: Error Level Analysis (recompression artifacts), pHash-based

@@ -39,11 +39,12 @@ backend/security/secrets.vault
 backend/security/master.key
 backend/security/ADMIN_CREDENTIALS.txt
 backend/ml/*.json
-# Trained model weights (reproducible from Kaggle; only the deployed model is tracked)
+# Trained model weights (reproducible from Kaggle; only the deployed models are tracked)
 backend/models/*.pt
 backend/models/*.pth
 backend/models/*.onnx
 !backend/models/faces_real_vs_fake_cnn.pt
+!backend/models/video_real_vs_fake_cnn.pt
 !backend/models/.gitkeep
 
 # ---------- Logs / OS ----------
