@@ -26,6 +26,9 @@ __pycache__/
 # ---------- Runtime data ----------
 backend/instance/
 backend/deepfake.db
+# Generated pipeline datasets (temp caches, rebuildable via ml/video_pipeline)
+backend/ml/datasets/
+backend/ml/video_datasets/
 backend/uploads/*
 backend/reports/*
 !backend/uploads/.gitkeep

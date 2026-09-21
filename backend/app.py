@@ -260,6 +260,12 @@ def create_app(config_class=Config):
         import threading
 
         threading.Thread(target=kaggle_reference.ensure_built, daemon=True).start()
+        if Config.VIDEO_REFERENCE_ENABLED:
+            # Video scans are scored against the multi-source pipeline corpus;
+            # pre-build that profile too so uploads never wait on it.
+            threading.Thread(
+                target=kaggle_reference.ensure_built, daemon=True, args=("video",)
+            ).start()
 
     return app
 

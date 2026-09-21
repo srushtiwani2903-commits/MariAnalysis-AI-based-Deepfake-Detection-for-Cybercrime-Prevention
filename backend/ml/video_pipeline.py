@@ -21,6 +21,7 @@ Usage:
 """
 import logging
 import os
+import random
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -61,21 +62,18 @@ VIDEO_SOURCES = [
     },
     {
         "source": "huggingface",
-        "name": "xingjunm/WildDeepfake",
-        "required": False,
-        "note": "7,314 in-the-wild deepfake videos with real/fake labels.",
-    },
-    {
-        "source": "huggingface",
         "name": "KhunPop/deepfake",
         "required": False,
-        "note": "3,296 videos, real + fake classes.",
+        "note": "3.3k real/fake clips split into combined_data/{train,val}/{real,fake} "
+                "folders (in-repo mp4 blobs, no auth).",
     },
     {
         "source": "huggingface",
         "name": "belkhir-nacim/deepfake-videos",
         "required": False,
-        "note": "Unified 913k-video dataset (label + hf_path) - streamed subset.",
+        "note": "Unified 913k-video corpus - clips are public, the label is "
+                "encoded in each filename (real_audio_real_visual / "
+                "fake_audio_fake_visual), probed via shard folders.",
     },
     {
         "source": "google",
@@ -153,15 +151,44 @@ def _walk_videos(root):
     return out
 
 
+def classify_relpath(rel, filename=None):
+    """Label a repo-relative media path as 'real' / 'fake' / None.
+
+    Label resolution order (deepfake-video layouts seen in the wild):
+    * the *top-level* folder of the video (``deepfake/``, ``video/``,
+      ``original_sequences/``, ``manipulated_sequences/``, ``Celeb-real/``,
+      ``Celeb-synthesis/``, ...), then
+    * the immediate parent folder name (``combined_data/train/real/`` style),
+    * finally the filename itself (the unified HF corpus encodes the label in
+      the basename, e.g. ``*_fake_audio_fake_visual__<hash>.mp4``).
+
+    The top-level ``video/`` folder means **real** for the unidpro &
+    simongraves Kaggle mirrors (``video/`` real clips, ``deepfake/`` swaps).
+    Paths that can not be classified return None so callers skip them and we
+    never mislabel a sample.
+    """
+    top = rel.split("/", 1)[0].lower()
+    cls = classify_dir(top)
+    if cls is None and top == "video":       # unidpro / simongraves: video/ = real
+        cls = "real"
+    if cls is None and "/" in rel:
+        cls = classify_dir(rel.rsplit("/", 1)[-2])
+    if cls is None and filename:
+        cls = classify_dir(os.path.splitext(os.path.basename(filename))[0])
+    return cls
+
+
 def classify_videos(root):
     """Return {'real': [paths...], 'fake': [...]} from a downloaded corpus.
 
-    Leaf folders containing videos get a class from ``classify_dir``; folders
-    that could not be classified are skipped so we never mislabel a sample.
+    Labels are resolved by ``classify_relpath`` (top-level folder -> parent
+    folder -> filename). Leaves that can not be classified are skipped so we
+    never mislabel a sample.
     """
     result = {"real": [], "fake": []}
     for path in _walk_videos(root):
-        cls = classify_dir(os.path.basename(os.path.dirname(path)))
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        cls = classify_relpath(rel, filename=os.path.basename(path))
         if cls in result:
             result[cls].append(path)
     return result
@@ -207,71 +234,150 @@ def _kaggle_fetch(entry, dest_root, per_class):
         return _copy_balanced(classified, dest_root, per_class, entry["name"])
 
 
-def _hf_fetch(entry, dest_root, per_class):
-    """Stream a Hugging Face video dataset and sample labelled clips.
+# ---------------------------------------------------------------------------
+# Hugging Face adapters (each fills real/ + fake/ folders under a temp root)
+# ---------------------------------------------------------------------------
+# belkhir-nacim/deepfake-videos stores 913k clips in numbered shard folders;
+# each shard mixes real + fake clips and the label lives in the filename.
+UNIFIED_CORPUS_PREFIX = "videos/DDL_dataset/videos"
 
-    Supports rows exposing a native Video feature (``row['video'].path``) as
-    well as rows with a relative path column (``hf_path``) resolved against
-    the dataset repo.
+
+def _unified_corpus_paths(repo, token, per_class):
+    """Probe the unified 913k-video corpus for labelled video paths.
+
+    Returns a list of repo file paths (real + fake mixed), or ``None`` when the
+    repo is not the unified-corpus layout (caller falls back to a recursive
+    listing). Only a handful of shard folders are listed - we stop as soon as
+    ``per_class`` videos of each class have been found - so a 913k-file repo
+    costs a few cheap API calls instead of a full tree enumeration.
     """
-    import urllib.request
+    from huggingface_hub import RepoFile, RepoFolder, list_repo_tree  # noqa: WPS433
 
-    from datasets import load_dataset
+    try:
+        top_entries = list_repo_tree(repo, path_in_repo="videos", recursive=False,
+                                     repo_type="dataset", token=token)
+    except Exception:  # noqa: BLE001
+        return None
+    if not any(isinstance(e, RepoFolder) and os.path.basename(e.path) == "DDL_dataset"
+               for e in top_entries):
+        return None
+
+    picked = {"real": [], "fake": []}
+    shard_idx = 0
+    while len(picked["real"]) < per_class or len(picked["fake"]) < per_class:
+        if shard_idx > 2000:              # safety valve past the last shard
+            break
+        shard = f"{shard_idx:03d}"
+        try:
+            entries = list_repo_tree(repo, path_in_repo=f"{UNIFIED_CORPUS_PREFIX}/{shard}",
+                                     recursive=False, repo_type="dataset", token=token)
+        except Exception:  # noqa: BLE001
+            break                         # shard index beyond the last one
+        if not entries:
+            break
+        for f in entries:
+            if not isinstance(f, RepoFile):
+                continue
+            if os.path.splitext(f.path)[1].lower() not in VIDEO_EXTS:
+                continue
+            cls = classify_relpath(f.path, filename=f.path)
+            if cls in picked and len(picked[cls]) < per_class:
+                picked[cls].append(f.path)
+        shard_idx += 1
+    if not picked["real"] and not picked["fake"]:
+        return None
+    logger.info("Hugging Face %s (unified corpus): located %d real + %d fake "
+                "clips after probing %d shard(s).",
+                repo, len(picked["real"]), len(picked["fake"]), shard_idx)
+    return picked["real"] + picked["fake"]
+
+
+def _hf_fetch(entry, dest_root, per_class):
+    """Pull labelled videos from a Hugging Face dataset repo.
+
+    Two layouts are supported:
+
+    * **Folder-structured** repos (``KhunPop/deepfake``, ...) - the repo tree
+      is listed over the HF HTTP API (paginated by the SDK) and videos are
+      labelled by ``classify_relpath`` (top-level / parent folder / filename).
+    * **Unified corpus** (``belkhir-nacim/deepfake-videos``) - 913k clips in
+      numbered shard folders whose labels are encoded in the filenames. Clips
+      are public (no auth), so we probe a handful of shard folders until we have
+      ``per_class`` of each class instead of enumerating the whole repo.
+
+    Videos are downloaded via ``hf_hub_download`` (SDK cache means a re-run
+    does not re-download). Public repos work with no credentials; gated/missing
+    repos degrade to a warning.
+    """
+    from huggingface_hub import RepoFile, hf_hub_download, list_repo_tree  # noqa: WPS433
 
     repo = entry["name"]
-    token = os.environ.get("HUGGINGFACE_TOKEN", "")
-    try:
-        ds = load_dataset(repo, split="train", streaming=True)
-        it = iter(ds)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Hugging Face %s not streamable, skipping: %s", repo, exc)
+    token = os.environ.get("HUGGINGFACE_TOKEN") or None
+
+    video_paths = _unified_corpus_paths(repo, token, per_class)
+    if video_paths is None:
+        try:
+            entries = list_repo_tree(repo, recursive=True, repo_type="dataset", token=token)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Hugging Face %s not listable (gated or missing), skipping: %s",
+                           repo, exc)
+            return {}
+        video_paths = []
+        for f in entries:
+            if not isinstance(f, RepoFile):
+                continue
+            if os.path.splitext(f.path)[1].lower() not in VIDEO_EXTS:
+                continue
+            video_paths.append(f.path)
+            if len(video_paths) > 100000:
+                logger.info("Hugging Face %s: stopped at 100k listed video files.", repo)
+                break
+    if not video_paths:
+        logger.warning("Hugging Face %s: no video files found.", repo)
         return {}
+
+    by_class = {"real": [], "fake": []}
+    for path in video_paths:
+        cls = classify_relpath(path, filename=path)
+        if cls in by_class:
+            by_class[cls].append(path)
 
     counts = {"real": 0, "fake": 0}
     for cls in counts:
         os.makedirs(os.path.join(dest_root, cls), exist_ok=True)
+    random.shuffle(by_class["real"])
+    random.shuffle(by_class["fake"])
 
-    def _save_bytes(data, idx, cls, ext):
-        path = os.path.join(dest_root, cls, f"hf_{idx}{ext}")
-        with open(path, "wb") as fh:
-            fh.write(data)
-        counts[cls] += 1
+    missing = {cls for cls, paths in by_class.items() if not paths}
+    if missing:
+        logger.warning("Hugging Face %s: no %s-labelled videos found.",
+                       repo, ", ".join(sorted(missing)))
 
-    tries = 0
-    for row in it:
-        if all(counts[c] >= per_class for c in counts):
-            break
-        tries += 1
-        if tries > 2000:
-            logger.warning("Hugging Face %s: gave up after 2000 rows.", repo)
-            break
-        try:
-            label = normalize_label(row.get("label") if isinstance(row, dict) else None)
-            if label not in counts or counts[label] >= per_class:
+    for cls in counts:
+        for path in by_class[cls]:
+            if counts[cls] >= per_class:
+                break
+            try:
+                local = hf_hub_download(repo_id=repo, filename=path,
+                                        repo_type="dataset", token=token)
+            except Exception as exc:  # noqa: BLE001
+                # A gated repo 401s on the very first blob - do not hammer it
+                # with one request per file, skip the whole source instead.
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if (status == 401 or "401" in str(exc)[:120]) and counts[cls] == 0:
+                    logger.warning("Hugging Face %s requires Hub access (401) for "
+                                   "file blobs - skipping source.", repo)
+                    return dict(counts)
+                logger.debug("Hugging Face %s skip %s: %s", repo, path, exc)
                 continue
-            ext = ".mp4"
-            payload = None
-            video = row.get("video")
-            if video is not None and hasattr(video, "path") and video.path:
-                with open(video.path, "rb") as fh:
-                    payload = fh.read()
-            if payload is None:
-                hf_path = row.get("hf_path") or row.get("path") or (row.get("filepath"))
-                if hf_path:
-                    idx = counts[label]
-                    url = f"https://huggingface.co/datasets/{repo}/resolve/main/{hf_path}"
-                    req = urllib.request.Request(url)
-                    if token:
-                        req.add_header("Authorization", f"Bearer {token}")
-                    with urllib.request.urlopen(req, timeout=60) as resp:
-                        payload = resp.read()
-                    ext = os.path.splitext(str(hf_path))[1].lower() or ".mp4"
-            if payload:
-                idx = counts[label]
-                _save_bytes(payload, idx, label, ext)
-                logger.debug("HF %s: saved %d %s video", repo, idx, label)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("HF row skipped: %s", exc)
+            idx = counts[cls]
+            ext = os.path.splitext(path)[1].lower()
+            dest = os.path.join(dest_root, cls, f"hf_{idx}{ext}")
+            try:
+                shutil.copy2(local, dest)
+                counts[cls] += 1
+            except OSError as exc:  # noqa: BLE001
+                logger.debug("Hugging Face %s copy skip %s: %s", repo, path, exc)
     logger.info("Hugging Face %s: sampled %s", repo, counts)
     return dict(counts)
 

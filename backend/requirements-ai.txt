@@ -9,3 +9,7 @@ kaggle==2.2.4
 # Training happens on Kaggle GPUs via ml/train_cnn_kaggle.py - not here.
 torch>=2.1
 torchvision>=0.16
+# Multi-source video data pipeline (Hugging Face + Google Drive datasets).
+datasets>=3.0
+huggingface_hub>=0.25
+gdown>=5.1

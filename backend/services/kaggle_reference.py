@@ -371,8 +371,12 @@ class KaggleReference:
 
 
 def _is_local_source(slug):
-    """True when a profile slug points at a local dataset (not a Kaggle slug)."""
-    return isinstance(slug, str) and slug.startswith("local:")
+    """True when a profile slug points at a local/pipeline dataset source.
+
+    Both ``local:...`` and ``pipeline:...`` profiles are cached on disk so a
+    restart reuses them instead of re-downloading the corpus.
+    """
+    return isinstance(slug, str) and (slug.startswith("local:") or slug.startswith("pipeline:"))
 
 
 def _reference_slug(media_type=_DEFAULT_MEDIA):
@@ -385,14 +389,38 @@ def _reference_slug(media_type=_DEFAULT_MEDIA):
 
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+_VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v",
+               ".mpeg", ".mpg", ".3gp", ".3g2", ".ogv", ".wmv", ".ts", ".mts"}
+
+# Parent-folder keywords used to split a raw Kaggle dataset into class labels.
+_REAL_TOKENS = ("real", "bonafide", "genuine", "original", "human", "natural")
+_FAKE_TOKENS = ("fake", "spoof", "cloned", "clone", "synthetic", "generated", "ai_")
+# Video datasets organise classes differently (FF++/Celeb-DF): real clips to
+# YouTube/Celeb-real/original folders, fakes under the manipulation method.
+_VIDEO_REAL_TOKENS = _REAL_TOKENS + ("youtube-real", "celeb-real", "source", "video")
+_VIDEO_FAKE_TOKENS = _FAKE_TOKENS + (
+    "synthesis", "synthesized", "manipulated", "swap", "neuralt",
+    "face2face", "deeppareid", "headreenact", "deepfakedetection")
+# Casual/genre folders that mean "just clips", not a class. Audio datasets
+# usually group synthetic voices by TTS-engine folder and real voices under a
+# "real" folder, so an unmatched engine folder is treated as fake there.
+_NEUTRAL_FOLDERS = {"clips", "audio", "samples", "data", "wav", "files", "dataset", "train", "test",
+                    "videos", "images", "image", "video"}
+
+
+def _tokens(media_type):
+    if media_type == "video":
+        return _VIDEO_REAL_TOKENS, _VIDEO_FAKE_TOKENS
+    return _REAL_TOKENS, _FAKE_TOKENS
 
 
 def _label_dir(folder, media_type=_DEFAULT_MEDIA):
     """Classify a folder basename as real / fake / unknown."""
     folder = (folder or "").lower()
-    if any(tok in folder for tok in _REAL_TOKENS):
+    real_tokens, fake_tokens = _tokens(media_type)
+    if any(tok in folder for tok in real_tokens):
         return "real"
-    if any(tok in folder for tok in _FAKE_TOKENS):
+    if any(tok in folder for tok in fake_tokens):
         return "fake"
     if media_type == "audio" and folder and folder not in _NEUTRAL_FOLDERS:
         return "fake"
@@ -402,19 +430,15 @@ def _label_dir(folder, media_type=_DEFAULT_MEDIA):
 def _local_dataset_root(media_type=_DEFAULT_MEDIA):
     """Return a local dataset folder with real/+fake/ inside, or None.
 
-    Explicit ``IMAGE_REFERENCE_DATASET_PATH`` wins; otherwise the standard
-    Kaggle cache + common dataset locations are probed (no deep walks).
+    An explicit ``<MEDIA>_REFERENCE_DATASET_PATH`` wins; otherwise the standard
+    Kaggle cache + pipeline dataset locations are probed (no deep walks).
     """
-    if media_type != "image":
-        return None
-
-    configured = getattr(Config, "IMAGE_REFERENCE_DATASET_PATH", "") or ""
+    env_name = "VIDEO_REFERENCE_DATASET_PATH" if media_type == "video" \
+        else "IMAGE_REFERENCE_DATASET_PATH"
+    configured = getattr(Config, env_name, "") or ""
     candidates = [configured] if configured.strip() else []
 
     tmp_root = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    # Known locations where real-vs-fake face datasets tend to live. The parent
-    # "real-vs-fake" folder is preferred so all splits (train/test/valid) are
-    # scanned, not just train.
     candidates += [
         os.path.join(tmp_root, "Temp", "opencode", "df_download",
                      "140k face detection datasets", "real_vs_fake", "real-vs-fake"),
@@ -422,24 +446,29 @@ def _local_dataset_root(media_type=_DEFAULT_MEDIA):
                      "140k face detection datasets", "real_vs_fake", "real-vs-fake", "train"),
         os.path.join(os.path.expanduser("~"), ".cache", "kagglehub", "datasets"),
         os.path.join(Config.BASE_DIR, "ml", "datasets"),
+        os.path.join(Config.BASE_DIR, "ml", "video_datasets"),
         os.path.join(Config.BASE_DIR, "models", "datasets"),
     ]
+    if media_type != "image":
+        # The face-dataset candidate paths above only ever hold images.
+        candidates = [c for c in candidates
+                      if "real-vs-fake" not in c]
 
     for root in candidates:
-        if root and os.path.isdir(root) and _real_fake_folders_exist(root):
-            logger.info("Using local image reference dataset: %s", root)
+        if root and os.path.isdir(root) and _real_fake_folders_exist(root, media_type):
+            logger.info("Using local %s reference dataset: %s", media_type, root)
             return root
     return None
 
 
-def _real_fake_folders_exist(root, depth=3):
+def _real_fake_folders_exist(root, media_type=_DEFAULT_MEDIA, depth=3):
     """True when the folder (or its split subfolders) contains real/ + fake/."""
     try:
         entries = os.listdir(root)
     except OSError:
         return False
-    direct_real = any(_label_dir(e) == "real" for e in entries)
-    direct_fake = any(_label_dir(e) == "fake" for e in entries)
+    direct_real = any(_label_dir(e, media_type) == "real" for e in entries)
+    direct_fake = any(_label_dir(e, media_type) == "fake" for e in entries)
     if direct_real and direct_fake:
         return True
     if depth <= 0:
@@ -448,26 +477,18 @@ def _real_fake_folders_exist(root, depth=3):
     for entry in entries:
         sub = os.path.join(root, entry)
         if os.path.isdir(sub) and not os.path.islink(sub):
-            if _real_fake_folders_exist(sub, depth - 1):
+            if _real_fake_folders_exist(sub, media_type, depth - 1):
                 return True
     return False
-
-
-# Parent-folder keywords used to split a raw Kaggle dataset into class labels.
-_REAL_TOKENS = ("real", "bonafide", "genuine", "original", "human", "natural")
-_FAKE_TOKENS = ("fake", "spoof", "cloned", "clone", "synthetic", "generated", "ai_")
-# Casual/genre folders that mean "just clips", not a class. Audio datasets
-# usually group synthetic voices by TTS-engine folder and real voices under a
-# "real" folder, so an unmatched engine folder is treated as fake there.
-_NEUTRAL_FOLDERS = {"clips", "audio", "samples", "data", "wav", "files", "dataset", "train", "test"}
 
 
 def _label(name, media_type=_DEFAULT_MEDIA):
     """Return 'fake' / 'real' from the file's parent folder (best-effort)."""
     folder = os.path.basename(os.path.dirname(name)).lower()
-    if any(tok in folder for tok in _REAL_TOKENS):
+    real_tokens, fake_tokens = _tokens(media_type)
+    if any(tok in folder for tok in real_tokens):
         return "real"
-    if any(tok in folder for tok in _FAKE_TOKENS):
+    if any(tok in folder for tok in fake_tokens):
         return "fake"
     if media_type == "audio" and folder and folder not in _NEUTRAL_FOLDERS:
         return "fake"  # unmatched top-level dir in an audio dataset = TTS engine
@@ -477,6 +498,10 @@ def _label(name, media_type=_DEFAULT_MEDIA):
 def _features(path, media_type=_DEFAULT_MEDIA):
     """Compute the analyzer feature vector for a reference file (best-effort)."""
     try:
+        if media_type == "video":
+            from services.analyze_video import feature_vector as _video_features
+            feats = _video_features(path)
+            return feats if feats and feats.get("frame_count", 0) > 0 else None
         if media_type == "audio":
             from services.analyze_audio import _librosa_features
             feats, ok = _librosa_features(path)
@@ -536,8 +561,8 @@ def _temp_reference_media(media_type, slug, n):
         raise RuntimeError(
             f"Could not locate real/fake labelled files in Kaggle dataset {slug}.")
 
-    fmt = "audio sample" if media_type == "audio" else "image"
-    timeout = 15 if media_type == "audio" else 12
+    fmt = "video" if media_type == "video" else ("audio sample" if media_type == "audio" else "image")
+    timeout = 60 if media_type == "video" else (15 if media_type == "audio" else 12)
     parent = tempfile.mkdtemp(prefix="marianalysis_ref_")
     out = {"fake": [], "real": []}
     try:
