@@ -67,8 +67,6 @@ def analyze_post(image_path, image_filename, image_size, caption, source_url=Non
                 base = 0.4 * base + 0.6 * gp
             elif gp <= 20 and base > 62:
                 base = 0.4 * base + 0.6 * gp
-    else:
-        base = base
     base = max(0.0, min(100.0, base))
     provider_note = score_reason(gemini, "post") + score_reason(local, "post")
 
