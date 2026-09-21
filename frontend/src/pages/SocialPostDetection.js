@@ -1,15 +1,16 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ShareIcon, PhotoIcon, ExclamationTriangleIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { ShareIcon, PhotoIcon, LinkIcon, ExclamationTriangleIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import api from "../api/api";
 
-// Social post detection: image (profile photo / media) + caption text.
+// Social post detection: image (profile photo / media) + caption text, or a post URL.
 export default function SocialPostDetection() {
   const navigate = useNavigate();
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [caption, setCaption] = useState("");
+  const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef(null);
@@ -26,7 +27,8 @@ export default function SocialPostDetection() {
     setBusy(true);
     try {
       const form = new FormData();
-      form.append("file", file);
+      if (file) form.append("file", file);
+      if (url.trim()) form.append("source_url", url.trim());
       form.append("caption", caption.trim());
       const { data } = await api.post("/detect/post", form, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -53,6 +55,22 @@ export default function SocialPostDetection() {
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
         className="glass-strong rounded-3xl p-6 sm:p-8 space-y-6">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+            Post URL <span className="font-normal">(optional — paste a social post link)</span>
+          </label>
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 px-3 focus-within:border-neon-blue/60">
+            <LinkIcon className="w-4 h-4 text-slate-400" />
+            <input
+              value={url}
+              onChange={(e) => { setError(""); setUrl(e.target.value); }}
+              type="url"
+              placeholder="https://x.com/user/status/… or a direct image link"
+              className="input !border-none !bg-transparent flex-1"
+            />
+          </div>
+        </div>
+
         <div className="grid sm:grid-cols-2 gap-5">
           {/* Image */}
           <div>
@@ -98,9 +116,9 @@ export default function SocialPostDetection() {
 
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {file ? `Image: ${file.name}` : "No image selected"} · {caption.trim().split(/\s+/).filter(Boolean).length} caption words
+            {file ? `Image: ${file.name}` : url.trim() ? `URL: ${url.trim()}` : "No image selected"} · {caption.trim().split(/\s+/).filter(Boolean).length} caption words
           </p>
-          <button onClick={analyze} disabled={busy || (!file && caption.trim().length < 30)} className="btn-primary">
+          <button onClick={analyze} disabled={busy || (!file && !url.trim() && caption.trim().length < 30)} className="btn-primary">
             <SparklesIcon className="w-5 h-5" /> {busy ? "Analyzing…" : "Analyze Post"}
           </button>
         </div>

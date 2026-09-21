@@ -27,7 +27,7 @@ for _entry in get_registry():
 
 class AIService:
     def analyze(self, media_type: str, file_path: str, filename: str, size_bytes: int,
-                text: str = None, caption: str = None):
+                text: str = None, caption: str = None, source_url: str = None):
         """Run the full pipeline and return a normalised prediction result."""
         started = time.time()
 
@@ -42,7 +42,7 @@ class AIService:
         elif media_type == "email":
             result = analyze_email(text or "", filename or "email-input.txt")
         elif media_type == "post":
-            result = analyze_post(file_path, filename, size_bytes, caption or "")
+            result = analyze_post(file_path, filename, size_bytes, caption or "", source_url or "")
         else:
             result = {"error": "Unsupported media type."}
 

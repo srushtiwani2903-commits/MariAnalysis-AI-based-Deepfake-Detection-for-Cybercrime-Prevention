@@ -1,6 +1,7 @@
 """Fake-news + deepfake analysis for a social-media post.
 
-Fuses the image and caption verdicts into one misinformation score.
+Fuses the image and caption verdicts into one misinformation score. Also
+handles caption-only posts and posts fetched from a URL.
 """
 import time
 
@@ -9,39 +10,62 @@ from services.analyze_text import analyze_text
 from config import Config
 from services.ensemble import (append_real_models, build_models, explain_short,
                                risk_label, trust_score)
-from services.model_providers import blend_scores, gemini_score, score_reason
+from services.model_providers import (blend_scores, gemini_score, local_score,
+                                      score_reason)
 
 
-def analyze_post(image_path, image_filename, image_size, caption):
+def analyze_post(image_path, image_filename, image_size, caption, source_url=None):
     start = time.time()
+    text_caption = (caption or "").strip()
 
-    image_result = analyze_image(image_path, image_filename, image_size)
-    if "error" in image_result:
-        return image_result
+    image_result = None
+    img_prob = 0.0
+    heatmap_file = ""
+    file_hash = ""
+
+    if image_path:
+        image_result = analyze_image(image_path, image_filename, image_size)
+        if "error" in image_result:
+            return image_result
+        img_prob = image_result["fake_probability"]
+        heatmap_file = image_result.get("heatmap_file", "")
+        file_hash = image_result.get("file_hash", "")
 
     caption_result = None
-    if caption and len(caption.strip()) >= 20:
-        caption_result = analyze_text(caption, "caption.txt")
+    if len(text_caption) >= 20:
+        caption_result = analyze_text(text_caption, image_filename or "caption.txt")
 
-    img_prob = image_result["fake_probability"]
     text_prob = caption_result["fake_probability"] if caption_result else 0.0
 
     # Combined: image weighs more, caption adds context.
-    if caption_result:
+    if image_path and caption_result:
         base = 0.7 * img_prob + 0.3 * text_prob
-    else:
+    elif image_path:
         base = img_prob
+    elif caption_result:
+        base = text_prob
+    else:
+        return {"error": "No image or caption text to analyse."}
 
     base = max(0.0, min(100.0, base))
 
-    # Cross-modal Gemini verdict on image + caption together.
-    gemini = gemini_score("post", file_path=image_path, text=caption or "")
-    blended = blend_scores(base, gemini, None)
+    # Cross-modal Gemini + local verdicts on image + caption together.
+    gemini = local = None
+    if image_path:
+        gemini = gemini_score("post", file_path=image_path, text=text_caption or None)
+        local = local_score("post", file_path=image_path, text=text_caption or None)
+        blended = blend_scores(base, gemini, local)
+    else:
+        blended = base
     base = max(0.0, min(100.0, blended))
-    provider_note = score_reason(gemini, "post")
+    provider_note = score_reason(gemini, "post") + score_reason(local, "post")
 
-    models, _final = build_models("post", base, f"{image_filename}|{caption[:40]}", spread=4.5)
-    models = append_real_models(models, [(gemini, f"Gemini ({Config.GEMINI_MODEL})")])
+    model_label = f"{image_filename or 'caption'}|{text_caption[:40]}"
+    models, _final = build_models("post", base, model_label, spread=4.5)
+    models = append_real_models(models, [
+        (gemini, f"Gemini ({Config.GEMINI_MODEL})"),
+        (local, "Local ViT (deepfake-vs-real)"),
+    ])
     result, _risk = _interpret(base)
     risk = risk_label(base)
     trust = trust_score(base, {
@@ -53,9 +77,18 @@ def analyze_post(image_path, image_filename, image_size, caption):
     recommendations = _recommendations(result)
     elapsed = int((time.time() - start) * 1000)
 
+    metadata = {
+        "image_fake_probability": round(img_prob, 1) if image_path else None,
+        "caption_fake_probability": round(text_prob, 1) if caption_result else None,
+        "caption_length": len(text_caption),
+        "file_hash_sha256": file_hash,
+    }
+    if source_url:
+        metadata["source_url"] = source_url
+
     return {
         "scan_type": "post",
-        "filename": image_filename,
+        "filename": image_filename or (image_result or {}).get("filename", "post-caption.txt"),
         "result": result,
         "confidence": 100.0 - abs(base - (100 if result == "fake" else 0)),
         "fake_probability": round(base, 1),
@@ -65,23 +98,18 @@ def analyze_post(image_path, image_filename, image_size, caption):
         "explanation": explanation,
         "recommendations": recommendations,
         "processing_time_ms": elapsed,
-        "metadata": {
-            "image_fake_probability": round(img_prob, 1),
-            "caption_fake_probability": round(text_prob, 1) if caption_result else None,
-            "caption_length": len(caption or ""),
-            "file_hash_sha256": image_result.get("file_hash", ""),
-        },
+        "metadata": metadata,
         "features": {
-            "image_ai_probability": round(img_prob / 100.0, 4),
+            "image_ai_probability": round(img_prob / 100.0, 4) if image_path else 0,
             "caption_ai_probability": round(text_prob / 100.0, 4) if caption_result else 0,
             "misinformation_score": round(base / 100.0, 4),
         },
         "models": models,
         "reasons": (image_result.get("reasons") or []) + (caption_result.get("reasons") or []),
-        "file_hash": image_result.get("file_hash", ""),
+        "file_hash": file_hash,
         "suspicious_sections": (caption_result.get("suspicious_sections") or [])[:10],
-        "heatmap_file": image_result.get("heatmap_file", ""),
-        "ai_providers": {"gemini": gemini, "local": None},
+        "heatmap_file": heatmap_file,
+        "ai_providers": {"gemini": gemini, "local": local},
         "model": "cross-modal-fusion-v1",
     }
 

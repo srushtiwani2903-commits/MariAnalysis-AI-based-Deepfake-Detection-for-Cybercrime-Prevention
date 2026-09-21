@@ -12,3 +12,6 @@ python-dotenv==1.0.1
 kaggle==2.2.4
 # Google Gemini API (free tier) - real AI scanning for image/video/audio/text
 google-genai>=1.0.0
+# Local Hugging Face transformer models (offline image + text deepfake detection)
+transformers>=5.0.0
+huggingface-hub>=0.26.0
