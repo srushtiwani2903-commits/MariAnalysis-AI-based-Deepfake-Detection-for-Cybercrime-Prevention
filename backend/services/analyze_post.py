@@ -105,7 +105,7 @@ def analyze_post(image_path, image_filename, image_size, caption, source_url=Non
             "misinformation_score": round(base / 100.0, 4),
         },
         "models": models,
-        "reasons": (image_result.get("reasons") or []) + (caption_result.get("reasons") or []),
+        "reasons": ((image_result or {}).get("reasons") or []) + (caption_result.get("reasons") or []),
         "file_hash": file_hash,
         "suspicious_sections": (caption_result.get("suspicious_sections") or [])[:10],
         "heatmap_file": heatmap_file,
