@@ -39,7 +39,7 @@ def analyze_post(image_path, image_filename, image_size, caption, source_url=Non
 
     # Combined: image weighs more, caption adds context.
     if image_path and caption_result:
-        base = 0.7 * img_prob + 0.3 * text_prob
+        base = 0.8 * img_prob + 0.2 * text_prob
     elif image_path:
         base = img_prob
     elif caption_result:
@@ -54,10 +54,22 @@ def analyze_post(image_path, image_filename, image_size, caption, source_url=Non
     if image_path:
         gemini = gemini_score("post", file_path=image_path, text=text_caption or None)
         local = local_score("post", file_path=image_path, text=text_caption or None)
-        blended = blend_scores(base, gemini, local)
+        # A social post is an ensemble verdict, so the real AI models carry
+        # more weight than the (weak on faces) heuristics.
+        blended = blend_scores(base, gemini, local,
+                               weights={"heuristic": 0.2, "gemini": 0.5, "local": 0.3})
+        base = max(0.0, min(100.0, blended))
+        # Confidence guard: never call an image authentic when Gemini is
+        # strongly convinced it is AI-generated (and vice-versa).
+        if gemini and gemini.get("available"):
+            gp = float(gemini.get("fake_probability", 50.0))
+            if gp >= 72 and base < 42:
+                base = 0.4 * base + 0.6 * gp
+            elif gp <= 20 and base > 62:
+                base = 0.4 * base + 0.6 * gp
     else:
-        blended = base
-    base = max(0.0, min(100.0, blended))
+        base = base
+    base = max(0.0, min(100.0, base))
     provider_note = score_reason(gemini, "post") + score_reason(local, "post")
 
     model_label = f"{image_filename or 'caption'}|{text_caption[:40]}"

@@ -204,7 +204,7 @@ def _run_gemini(parts, media_type):
         return None
 
 
-def _media_parts_for(media_type, file_path=None, text=None, max_kb=18 * 1024):
+def _media_parts_for(media_type, file_path=None, text=None, max_kb=5 * 1024 * 1024):
     """Build Gemini contents (Parts) for a media type. None if no payload."""
     from google.genai import types as gtypes
     if media_type in ("text", "email"):
@@ -222,13 +222,17 @@ def _media_parts_for(media_type, file_path=None, text=None, max_kb=18 * 1024):
         mime = mime_map.get(media_type, "application/octet-stream")
         size = os.path.getsize(file_path)
         prompt = _gemini_prompt(media_type)
-        if media_type in ("image", "post") and size <= max_kb:
+        if media_type in ("image", "post"):
+            # Always make the image usable by Gemini: send small files as-is,
+            # downscale large ones so the strong multimodal signal is never
+            # skipped just because a photo is bigger than a few KB.
             try:
-                with open(file_path, "rb") as f:
-                    data = f.read()
-                return [prompt, gtypes.Part.from_bytes(data=data, mime_type=mime)]
+                data = _image_payload_for_gemini(file_path, max_kb)
             except Exception:  # noqa: BLE001
                 return None
+            if not data:
+                return None
+            return [prompt, gtypes.Part.from_bytes(data=data, mime_type="image/jpeg")]
         if media_type == "audio" and size <= max_kb:
             try:
                 import mimetypes
@@ -246,6 +250,34 @@ def _media_parts_for(media_type, file_path=None, text=None, max_kb=18 * 1024):
                              for f in frames)
                 return parts
     return None
+
+
+def _image_payload_for_gemini(file_path, max_kb, max_dim=1024, quality=85):
+    """Return image bytes Gemini can ingest (as-is when small, else downscaled).
+
+    Real photos / Instagram downloads are routinely larger than a few KB; the
+    old 18 KB inline cap silently disabled Gemini for almost every real scan.
+    Large images are resized to ``max_dim`` and re-encoded as JPEG so the
+    multimodal model always gets a usable copy.
+    """
+    import io
+    from PIL import Image
+    size = os.path.getsize(file_path)
+    if size <= max_kb:
+        with open(file_path, "rb") as f:
+            return f.read()
+    img = Image.open(file_path)
+    img.verify()
+    img = Image.open(file_path).convert("RGB")
+    img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+    buf = io.BytesIO()
+    for q in (quality, 72, 60, 45):
+        buf.seek(0)
+        buf.truncate(0)
+        img.save(buf, format="JPEG", quality=q)
+        if buf.tell() <= max_kb:
+            break
+    return buf.getvalue()
 
 
 def _sample_video_frames(file_path, max_frames=6):
@@ -434,18 +466,21 @@ def local_score(media_type, file_path=None, text=None):
 # ---------------------------------------------------------------------------
 # Blending
 # ---------------------------------------------------------------------------
-def blend_scores(heuristic, gemini=None, local=None):
+def blend_scores(heuristic, gemini=None, local=None, weights=None):
     """Blend available probability sources (0-100 each) into one verdict.
 
     Unavailable providers are automatically dropped and the remaining weights
     are re-normalised, so the heuristic always has a guaranteed floor.
+    ``weights`` may override the per-provider weights (e.g. give the real AI
+    models more say for a fused/ensembled verdict like social posts).
     """
     from config import Config
-    weights = {
-        "heuristic": Config.AI_BLEND_HEURISTIC,
-        "gemini": Config.AI_BLEND_GEMINI,
-        "local": Config.AI_BLEND_LOCAL,
-    }
+    if weights is None:
+        weights = {
+            "heuristic": Config.AI_BLEND_HEURISTIC,
+            "gemini": Config.AI_BLEND_GEMINI,
+            "local": Config.AI_BLEND_LOCAL,
+        }
     sources = []
     if heuristic is not None:
         sources.append((max(0.0, min(100.0, float(heuristic))), weights["heuristic"]))
