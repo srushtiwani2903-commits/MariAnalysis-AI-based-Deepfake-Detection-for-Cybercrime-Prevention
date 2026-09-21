@@ -42,6 +42,15 @@ _KEYS_BY_MEDIA = {
         "mfcc_variance",
         "rms_energy",
     ],
+    "video": [
+        "face_presence",
+        "synthetic_smoothness",
+        "temporal_flicker",
+        "byte_hash_drift",
+        "compression_ratio",
+        "texture_uniformity",
+        "error_level_analysis",
+    ],
 }
 _DEFAULT_MEDIA = "image"
 
@@ -202,6 +211,12 @@ class KaggleReference:
         if local_root:
             return self._build_profile_from_local(media_type, local_root)
 
+        # Video scans are compared against the multi-source pipeline corpus
+        # (Kaggle + Hugging Face + Google Drive), so a video profile is built
+        # there instead of forcing a raw Kaggle sample fetch.
+        if media_type == "video":
+            return self._build_video_profile()
+
         from ml.kaggle_pipeline import resolve_credentials, write_kaggle_json
 
         # Force credentials resolution so the Kaggle client is authenticated.
@@ -229,18 +244,60 @@ class KaggleReference:
             raise RuntimeError("Not enough labelled samples fetched from Kaggle.")
         return profile
 
+    def _build_video_profile(self):
+        """Build the video reference profile from the pipeline corpus.
+
+        ``ml.video_pipeline.fetch_reference_videos`` pulls a labelled real/fake
+        sample across Kaggle / Hugging Face / Google Drive into a temp cache
+        (auto-deleted), and every later user upload is scored against these
+        per-class distributions. User uploads are never part of the corpus.
+        """
+        from ml.video_pipeline import fetch_reference_videos
+
+        n = Config.VIDEO_REFERENCE_SAMPLE_SIZE
+        keys = _KEYS_BY_MEDIA["video"]
+        profile = _Profile("pipeline:video")
+        with fetch_reference_videos(n) as (per_class, _parent):
+            for cls, paths in per_class.items():
+                vectors = [_features(path, "video") for path in paths]
+                vectors = [v for v in vectors if v is not None]
+                profile.samples[cls] = len(vectors)
+                stats = defaultdict(list)
+                for v in vectors:
+                    for key in keys:
+                        stats[key].append(v[key])
+                profile.classes[cls] = {
+                    key: _mean_std(values) for key, values in stats.items()
+                }
+        if profile.samples.get("fake", 0) < 3 or profile.samples.get("real", 0) < 3:
+            raise RuntimeError(
+                "Not enough labelled videos fetched from the pipeline "
+                f"(real={profile.samples.get('real', 0)}, "
+                f"fake={profile.samples.get('fake', 0)}). Enable at least one "
+                "working source (see ml/video_pipeline.py).")
+        logger.info("Video reference profile built from pipeline datasets: %s",
+                    dict(profile.samples))
+        return profile
+
     def _build_profile_from_local(self, media_type, root):
         """Build per-class feature stats from a local real/fake folder set.
 
         ``root`` should contain ``real/`` and ``fake/`` subfolders (optionally
         train/test/valid splits whose basenames are also matched). Uses up to
-        IMAGE_REFERENCE_MAX_PER_CLASS images per class.
+        MAX_PER_CLASS media items per class (images or videos).
         """
         keys = _KEYS_BY_MEDIA.get(media_type, _KEYS_BY_MEDIA[_DEFAULT_MEDIA])
-        max_per_class = getattr(Config, "IMAGE_REFERENCE_MAX_PER_CLASS", 50000)
+        # Image profiles cap the corpus with IMAGE_REFERENCE_MAX_PER_CLASS,
+        # video with VIDEO_REFERENCE_MAX_PER_CLASS.
+        max_per_class = getattr(
+            Config,
+            "VIDEO_REFERENCE_MAX_PER_CLASS" if media_type == "video"
+            else "IMAGE_REFERENCE_MAX_PER_CLASS",
+            50000)
+        exts = _VIDEO_EXTS if media_type == "video" else _IMAGE_EXTS
 
         def _collect(dirs):
-            """Yield image paths up to max_per_class per class."""
+            """Yield items up to max_per_class per class."""
             counts = {"real": 0, "fake": 0}
             for d in sorted(dirs):
                 if not os.path.isdir(d):
@@ -254,7 +311,7 @@ class KaggleReference:
                     full = os.path.join(d, name)
                     if not os.path.isfile(full):
                         continue
-                    if os.path.splitext(name)[1].lower() not in _IMAGE_EXTS:
+                    if os.path.splitext(name)[1].lower() not in exts:
                         continue
                     yield cls, full
                     counts[cls] += 1
@@ -302,13 +359,14 @@ class KaggleReference:
                 key: _mean_std(values) for key, values in stats.items()
             }
             total += profile.samples[cls]
-            logger.info("Local reference %s: %d %s images profiled.",
-                        media_type, profile.samples[cls], cls)
+            logger.info("Local reference %s: %d %s %ss profiled.",
+                        media_type, profile.samples[cls], cls, media_type)
         if profile.samples.get("fake", 0) < 5 or profile.samples.get("real", 0) < 5:
             raise RuntimeError("Not enough labelled samples in local dataset "
                                f"{root} (real={profile.samples.get('real', 0)}, "
                                f"fake={profile.samples.get('fake', 0)}).")
-        logger.info("Local reference profile built from %d images in %s.", total, root)
+        logger.info("Local reference profile built from %d %ss in %s.",
+                    total, media_type, root)
         return profile
 
 

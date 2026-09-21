@@ -102,6 +102,53 @@ class Config:
     # (0..1; the rest stays with the explainable heuristic engines).
     IMAGE_CNN_WEIGHT = float(os.environ.get("IMAGE_CNN_WEIGHT", "0.45"))
 
+    # --- Trained video CNN (frame-level) ---
+    # Optional PyTorch CNN trained on real-vs-fake video frames sampled by
+    # ml/video_pipeline.py (weights from ml/train_video_cnn_kaggle.py). When
+    # MODEL_ENABLED=true the video detector uses the same checkpoint as the
+    # image detector unless VIDEO_MODEL_ENABLED tells it otherwise.
+    VIDEO_MODEL_ENABLED = os.environ.get(
+        "VIDEO_MODEL_ENABLED",
+        os.environ.get("MODEL_ENABLED", "false"),
+    ).lower() == "true"
+    VIDEO_CNN_PATH = os.environ.get(
+        "VIDEO_CNN_PATH", os.path.join(MODEL_DIR, "video_real_vs_fake_cnn.pt"))
+    # Share the CNN weight default unless configured separately.
+    VIDEO_CNN_WEIGHT = float(os.environ.get("VIDEO_CNN_WEIGHT", "0.40"))
+    # Number of frames sampled from a user's video for the trained CNN pass
+    # and for the frame-level features (fused into the reference comparison).
+    VIDEO_FRAME_SAMPLE_SIZE = int(os.environ.get("VIDEO_FRAME_SAMPLE_SIZE", 12))
+    # Max frames extracted per video when building the train/test frame-set.
+    VIDEO_DATASET_FRAMES_PER_VIDEO = int(os.environ.get("VIDEO_DATASET_FRAMES_PER_VIDEO", 8))
+    # Downscale target when building frame-sets (keeps datasets small but
+    # still large enough to train meaningful texture/ELA features).
+    VIDEO_DATASET_FRAME_SIZE = int(os.environ.get("VIDEO_DATASET_FRAME_SIZE", 256))
+
+    # --- Video reference comparison (per-class feature distributions) ---
+    # Same idea as KAGGLE_REFERENCE_ENABLED but for video: a small labelled
+    # sample of real + fake videos is pulled from the pipeline datasets once,
+    # frame-level feature stats are built, and every user video scan is scored
+    # against those distributions in real time.
+    VIDEO_REFERENCE_ENABLED = os.environ.get("VIDEO_REFERENCE_ENABLED", "true").lower() == "true"
+    VIDEO_REFERENCE_SAMPLE_SIZE = int(os.environ.get("VIDEO_REFERENCE_SAMPLE_SIZE", 6))
+    # Local real/fake VIDEO dataset folder used instead of a remote fetch when
+    # set (must contain real/ and fake/ sub-folders). Auto-detected otherwise.
+    VIDEO_REFERENCE_DATASET_PATH = os.environ.get("VIDEO_REFERENCE_DATASET_PATH", "")
+    VIDEO_REFERENCE_MAX_PER_CLASS = int(os.environ.get("VIDEO_REFERENCE_MAX_PER_CLASS", 200))
+
+    # --- Multi-source video training/testing data pipeline ---
+    # Data is pulled ONLY from these labelled sources (Kaggle, Hugging Face,
+    # Google Drive), used to build train/val/test frame-sets and profile
+    # distributions - user uploads are never added to the corpus. Sizes below
+    # cap how many videos per class each source is asked for.
+    VIDEO_PIPELINE_VIDEOS_PER_CLASS = int(os.environ.get("VIDEO_PIPELINE_VIDEOS_PER_CLASS", 8))
+    VIDEO_HF_VIDEOS_PER_CLASS = int(os.environ.get("VIDEO_HF_VIDEOS_PER_CLASS", 6))
+    # Google Drive hosts FaceForensics++ and Celeb-DF behind an approval form.
+    # Once you receive a shareable link, its file ID goes here (or in the
+    # registry) and the gdown adapter downloads the archive automatically.
+    VIDEO_GOOGLE_FFPP_DRIVE_ID = os.environ.get("VIDEO_GOOGLE_FFPP_DRIVE_ID", "")
+    VIDEO_GOOGLE_CELEBDF_DRIVE_ID = os.environ.get("VIDEO_GOOGLE_CELEBDF_DRIVE_ID", "")
+
     # Kaggle credentials live in the encrypted vault; only the (optional)
     # pointer to a kaggle.json file stays in the environment. Datasets are
     # pulled into a temp cache that is auto-deleted after use.
