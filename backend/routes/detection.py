@@ -6,6 +6,9 @@ persists ScanHistory/AIPrediction and returns the full result.
 """
 import html
 import os
+import threading
+import time as _time
+from collections import deque
 from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
@@ -20,6 +23,64 @@ from utils.idps import audit
 from utils.security import (limiter, sanitize_filename, sanitize_text, validate_upload)
 
 detect_bp = Blueprint("detect", __name__)
+
+
+# --------------------------------------------------------------------------- #
+# Replay guard: per-user rolling frame history for the live webcam loop.     #
+# A real person behind the camera keeps moving (natural motion), while a     #
+# screen replaying content is typically still (low inter-frame movement).    #
+# --------------------------------------------------------------------------- #
+_LIVE_MEM = {}
+_LIVE_MEM_LOCK = threading.Lock()
+_LIVE_MEM_MAX = 6
+_MOTION_STILL = 0.045   # mean abs pixel diff below this = "still"
+_BANDING_HIGH = 0.05    # column-intensity variation above this = screen bands
+
+
+def _liveness_probe(user_id, path, faces_detected):
+    """Track recent frames and return replay-guard metrics for this frame."""
+    try:
+        import numpy as np
+        from PIL import Image
+        thumb = np.asarray(
+            Image.open(path).convert("L").resize((64, 48)), dtype=np.float32) / 255.0
+    except Exception:  # noqa: BLE001
+        return None
+
+    now = _time.time()
+    prev = None
+    with _LIVE_MEM_LOCK:
+        history = _LIVE_MEM.get(user_id) or deque(maxlen=_LIVE_MEM_MAX)
+        history = deque([(t, th) for t, th in history if now - t <= 3.0], maxlen=_LIVE_MEM_MAX)
+        if history:
+            prev = history[-1][1]
+        history.append((now, thumb))
+        _LIVE_MEM[user_id] = history
+
+    if prev is None:
+        return {"sample_frames": 1, "motion": 0.0, "motion_avg": 0.0,
+                "banding": 0.0, "replay_suspected": False}
+
+    diff = float(np.mean(np.abs(thumb - prev)))
+
+    items = list(history)
+    motion_list = []
+    for i in range(1, len(items)):
+        motion_list.append(float(np.mean(np.abs(items[i][1] - items[i - 1][1]))))
+    motion_avg = float(np.mean(motion_list)) if motion_list else 0.0
+    row_var = float(np.std(np.mean(thumb, axis=1)))
+    col_var = float(np.std(np.mean(thumb, axis=0)))
+    banding = max(row_var, col_var)
+
+    still = motion_avg < _MOTION_STILL and len(motion_list) >= 2
+    replay = bool(still and (faces_detected > 0 or banding > _BANDING_HIGH))
+    return {
+        "sample_frames": len(items),
+        "motion": diff,
+        "motion_avg": round(motion_avg, 4),
+        "banding": round(banding, 4),
+        "replay_suspected": replay,
+    }
 
 
 def _rate_limit():
@@ -293,6 +354,18 @@ def detect_realtime():
         result.pop("scan_id", None)
         result["persisted"] = False
         result["live"] = True
+        faces = result.get("features", {}).get("faces_detected", 0)
+        liveness = _liveness_probe(str(get_jwt_identity()), path, faces)
+        if liveness is not None:
+            if liveness["replay_suspected"]:
+                boost = min(100.0, result.get("fake_probability", 0.0) + 20.0)
+                result["fake_probability"] = round(boost, 1)
+                result["reasons"].append({
+                    "check": "Replay guard: feed is still (no liveness)",
+                    "passed": False,
+                    "detail": "Webcam feed showed a still/static source; treat it as replayed content.",
+                })
+            result["liveness"] = liveness
         return jsonify({"result": result}), 200
     finally:
         try:
