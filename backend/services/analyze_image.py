@@ -480,10 +480,28 @@ def analyze_image(file_path, filename, size_bytes):
         spectral_effective = spectral_score
         noise_effective = noise_score
 
+    # Global platform-recompression guard. Social platforms (Instagram,
+    # Facebook, X, WhatsApp...) re-encode the WHOLE image uniformly and strip
+    # EXIF, inflating recompression_similarity without any AI manipulation - so
+    # a real photo downloaded from a social post can false-positive. Real AI
+    # edits/manipulation are LOCALISED, which shows up as a HIGH
+    # ela_local_variance instead of a uniform whole-image recompress.
+    global_recompress = (
+        recomp_score >= 0.60
+        and ela_local_variance < 0.25
+        and not meta.get("has_ai_generator_tag")
+        and not is_real_camera
+    )
+    effective_recomp = recomp_score * 0.35 if global_recompress else recomp_score
+    if global_recompress:
+        # Missing EXIF is EXPECTED on platform downloads, not a red flag.
+        meta_score = min(meta_score, 0.15)
+    features["platform_recompression"] = 1.0 if global_recompress else 0.0
+
     base = (
         0.16 * ela_score           # ELA - catches manipulation (high ELA)
         + 0.18 * texture_score     # Smooth textures = synthetic (most reliable)
-        + 0.13 * recomp_score      # Too-clean recompression
+        + 0.13 * effective_recomp  # Too-clean recompression (dampened on platform recompresses)
         + 0.10 * meta_score        # Missing EXIF / AI tags
         + 0.06 * flatness          # Color flatness
         + 0.05 * face_score        # Face heuristics
@@ -503,9 +521,9 @@ def analyze_image(file_path, filename, size_bytes):
         ai_signals += 1
     if texture_score >= 0.75:
         ai_signals += 1
-    if recomp_score >= 0.80:
+    if effective_recomp >= 0.80:
         ai_signals += 1
-    if ela_score <= 0.08:
+    if ela_score <= 0.08 and not global_recompress:
         ai_signals += 1
     if meta.get("has_ai_generator_tag"):
         ai_signals += 2  # Strong signal
@@ -523,7 +541,12 @@ def analyze_image(file_path, filename, size_bytes):
     try:
         from services.kaggle_reference import kaggle_reference
         kaggle_reference.ensure_built()
-        kaggle_info = kaggle_reference.score(shared)
+        # For platform-recompressed files the recompression feature is inflated
+        # by the social platform, not by AI - drop it from the reference
+        # comparison so it can't drag the file toward the fake class.
+        ref_features = shared if not global_recompress else {
+            **shared, "recompression_similarity": None}
+        kaggle_info = kaggle_reference.score(ref_features)
         if kaggle_info and kaggle_info.get("status") == "ready":
             ref_likelihood = kaggle_info["fake_likelihood"]
             base = max(0.0, min(1.0, 0.75 * base + 0.25 * ref_likelihood))
@@ -577,6 +600,10 @@ def analyze_image(file_path, filename, size_bytes):
                         "(localised artifacts detected), which raises the suspicion scale.")
     elif ai_origin == "ai_generated":
         explanation += " The content shows hallmarks of being generated entirely by AI."
+    if global_recompress:
+        explanation += (" Note: the file shows whole-image recompression typical of a "
+                        "social-platform download, so compression/metadata signals were "
+                        "treated as non-forensic to avoid a false positive.")
     recommendations = _recommendations(result)
 
     elapsed = int((time.time() - start) * 1000)

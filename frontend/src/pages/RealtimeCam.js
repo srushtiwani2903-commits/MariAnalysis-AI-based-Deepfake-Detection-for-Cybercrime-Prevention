@@ -184,6 +184,9 @@ export default function RealtimeCam() {
           <div className="w-full space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-slate-500">Detected faces</span>
               <span className="font-mono">{result?.features?.faces_detected ?? result?.face_analysis?.faces_detected ?? "—"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Replay guard</span>
+              <span className={`font-mono font-bold ${result?.liveness?.replay_suspected ? "text-rose-500" : "text-emerald-500"}`}>
+                {result?.liveness?.replay_suspected ? "SCREEN REPLAY" : "LIVE"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Signal confidence</span>
               <span className="font-mono">{result?.confidence ?? "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Status</span>
