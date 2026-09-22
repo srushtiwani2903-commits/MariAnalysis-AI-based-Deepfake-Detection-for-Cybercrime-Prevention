@@ -96,41 +96,45 @@ class _VideoDetector:
             return model
 
     def _frames(self, video_path, max_frames):
-        """Yield evenly spaced RGB PIL frames. Best-effort with OpenCV."""
+        """Return evenly spaced RGB PIL frames. Best-effort with OpenCV.
+
+        Uses frame seeks (with a sequential fallback) so only the sampled
+        positions are decoded instead of the whole video.
+        """
+        from services.analyze_video import _frame_targets, _read_sampled_frames
         frames = []
         try:
             import cv2
             cap = cv2.VideoCapture(video_path)
             count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            cap.release()
             if count <= 0:
                 count = 240
-            step = max(1, count // max_frames)
-            idx = 0
-            while len(frames) < max_frames:
-                ok, frame = cap.read()
-                if not ok:
-                    break
-                if idx % step == 0:
-                    from PIL import Image
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    frames.append(Image.fromarray(rgb))
-                idx += 1
-            cap.release()
+            for frame in _read_sampled_frames(
+                    video_path, _frame_targets(count, max_frames)):
+                from PIL import Image
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(Image.fromarray(rgb))
         except Exception:  # noqa: BLE001
             pass
         return frames
 
-    def predict(self, video_path):
+    def predict(self, video_path, frames=None):
         """Return a dict with fake_probability, or None when unavailable/failed.
 
         The video-level probability is the mean of per-frame fake probabilities;
         ``max_fake`` and ``fake_share`` tell how consistently the network flags
         frames (a face-swapped section only flags part of the timeline).
+
+        ``frames`` optionally passes already-decoded BGR numpy frames (the same
+        ones the heuristic extractor sampled) so the video file is decoded only
+        once across the whole scan.
         """
         if not self.available():
             return None
         try:
             torch = self._torch()
+            import cv2
             from torchvision import transforms
 
             model = self._ensure_loaded()
@@ -143,19 +147,25 @@ class _VideoDetector:
                                      self._meta["transform"]["std"]),
             ])
 
-            frames = self._frames(video_path, max_frames=Config.VIDEO_FRAME_SAMPLE_SIZE)
-            if not frames:
+            if frames is None:
+                frames_pil = self._frames(
+                    video_path, max_frames=Config.VIDEO_FRAME_SAMPLE_SIZE)
+            else:
+                frames_pil = []
+                for frame in frames:
+                    from PIL import Image
+                    frames_pil.append(Image.fromarray(
+                        cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+            if not frames_pil:
                 logger.warning("Video CNN: no frames could be sampled from %s", video_path)
                 return None
 
             start = time.time()
-            probs = []
             with torch.no_grad():
-                for img in frames:
-                    x = tf(img).unsqueeze(0)
-                    logits = model(x)
-                    p = torch.softmax(logits, dim=1)[0]
-                    probs.append(float(p[self._meta["fake_label"]]))
+                batch = torch.stack([tf(img) for img in frames_pil])
+                logits = model(batch)
+                probs = torch.softmax(logits, dim=1)
+                probs = [float(p) for p in probs[:, self._meta["fake_label"]].tolist()]
             latency_ms = int((time.time() - start) * 1000)
 
             mean_prob = sum(probs) / len(probs)

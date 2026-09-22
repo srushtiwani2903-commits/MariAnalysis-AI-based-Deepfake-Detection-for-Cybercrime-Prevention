@@ -98,59 +98,131 @@ def _detect_face(gray):
     return out
 
 
+def _frame_targets(count, n):
+    """Evenly spaced, unique, ascending frame indices to sample."""
+    step = max(1, count // n)
+    return sorted({min(count - 1, i * step) for i in range(n)})
+
+
+def _read_sampled_frames(file_path, indices):
+    """Read the frames at ``indices`` using frame seeks where possible.
+
+    Decoding every frame just to reach a handful of evenly spaced samples is
+    the dominant cost of a video scan, so this seeks straight to each wanted
+    position. When a codec/backend doesn't honour seeking (the position would
+    move backwards), it falls back to a single sequential pass.
+    """
+    import cv2
+    frames = []
+    cap = cv2.VideoCapture(file_path)
+    try:
+        want = sorted(indices)
+        if not want:
+            return frames
+        seekable = True
+        try:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, want[len(want) // 2])
+            if int(cap.get(cv2.CAP_PROP_POS_FRAMES)) < want[len(want) // 2]:
+                seekable = False
+        except Exception:  # noqa: BLE001
+            seekable = False
+        if seekable:
+            for idx in want:
+                try:
+                    ok = cap.set(cv2.CAP_PROP_POS_FRAMES, idx) and \
+                        int(cap.get(cv2.CAP_PROP_POS_FRAMES)) >= idx
+                except Exception:  # noqa: BLE001
+                    ok = False
+                if not ok:
+                    seekable = False
+                    break
+                grabbed, frame = cap.read()
+                if not grabbed:
+                    break
+                frames.append(frame)
+        if not seekable or len(frames) < len(want):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            frames, pos, wi = [], -1, 0
+            while wi < len(want):
+                grabbed, frame = cap.read()
+                pos += 1
+                if not grabbed:
+                    break
+                if pos == want[wi]:
+                    frames.append(frame)
+                    wi += 1
+    finally:
+        cap.release()
+    return frames
+
+
+def _frame_for_processing(frame, max_dim=None):
+    """Downscale a BGR frame so image features and the CNN stay fast on high-res video."""
+    import cv2
+    limit = max_dim or getattr(Config, "VIDEO_FRAME_MAX_DIM", 720)
+    h, w = frame.shape[:2]
+    if limit and max(h, w) > limit:
+        scale = float(limit) / float(max(h, w))
+        frame = cv2.resize(frame, (int(w * scale), int(h * scale)),
+                           interpolation=cv2.INTER_AREA)
+    return frame
+
+
 def _extract_frames(file_path, max_frames=None):
     """Extract evenly spaced frames for analysis.
 
-    Returns list of frame dicts with face quality + image-feature metrics
-    (identical to the image analyzer's `feature_vector`, so a scanned frame
-    and a pipeline-reference frame are measured the same way).
+    Only the sampled frame positions are decoded (frame seeks, with a
+    sequential fallback), so long videos don't pay a full decode. Returns
+    ``(frame_metrics, raw_frames)`` where ``raw_frames`` are the downscaled BGR
+    frames that can be fed straight into the trained frame-CNN without a second
+    decode of the file.
+
+    Each sampled frame carries face quality + image-feature metrics (identical
+    to the image analyzer's `feature_vector`, so a scanned frame and a
+    pipeline-reference frame are measured the same way).
     """
     max_frames = max_frames or Config.VIDEO_FRAME_SAMPLE_SIZE
-    frames = []
+    frames, raw_frames = [], []
     try:
         import cv2
         from services.analyze_image import feature_vector
         cap = cv2.VideoCapture(file_path)
         count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
+        cap.release()
         if count <= 0:
             count = 240
-        step = max(1, count // max_frames)
-        idx = 0
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            if idx % step == 0 and len(frames) < max_frames:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                face = _detect_face(gray)
-                frame_feats = {}
-                try:
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    from PIL import Image
-                    frame_feats = feature_vector(Image.fromarray(rgb))
-                except Exception:  # noqa: BLE001
-                    pass
-                frames.append({
-                    "index": idx,
-                    "timestamp": round(idx / fps, 2) if fps else 0,
-                    "has_face": face["has_face"],
-                    "face_w": face["width"],
-                    "face_h": face["height"],
-                    "face_consistency": face["face_consistency"],
-                    "lighting_consistency": face["lighting_consistency"],
-                    "sharpness": float(gray.var()) if gray.size else 0,
-                    "mean_luma": float(gray.mean()) if gray.size else 0,
-                    "ela": frame_feats.get("error_level_analysis"),
-                    "texture": frame_feats.get("texture_uniformity"),
-                    "recomp": frame_feats.get("recompression_similarity"),
-                    "entropy": frame_feats.get("histogram_entropy"),
-                })
-            idx += 1
-        cap.release()
+        indices = _frame_targets(count, max_frames)
+        for idx, frame in zip(indices, _read_sampled_frames(file_path, indices)):
+            small = _frame_for_processing(frame)
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            face = _detect_face(gray)
+            frame_feats = {}
+            try:
+                rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                from PIL import Image
+                frame_feats = feature_vector(Image.fromarray(rgb))
+            except Exception:  # noqa: BLE001
+                pass
+            frames.append({
+                "index": idx,
+                "timestamp": round(idx / fps, 2) if fps else 0,
+                "has_face": face["has_face"],
+                "face_w": face["width"],
+                "face_h": face["height"],
+                "face_consistency": face["face_consistency"],
+                "lighting_consistency": face["lighting_consistency"],
+                "sharpness": float(gray.var()) if gray.size else 0,
+                "mean_luma": float(gray.mean()) if gray.size else 0,
+                "ela": frame_feats.get("error_level_analysis"),
+                "texture": frame_feats.get("texture_uniformity"),
+                "recomp": frame_feats.get("recompression_similarity"),
+                "entropy": frame_feats.get("histogram_entropy"),
+            })
+            raw_frames.append(small)
     except Exception:
         pass
-    return frames
+    return frames, raw_frames
 
 
 def _hash_drift(file_path):
@@ -184,7 +256,7 @@ def feature_vector(file_path, max_frames=None):
     used for a user's upload and for pipeline reference videos so the
     reference comparison is apples-to-apples.
     """
-    frames = _extract_frames(file_path, max_frames)
+    frames, _ = _extract_frames(file_path, max_frames)
     if not frames:
         return None
     return _aggregate_features(frames, _probe_video(file_path), _hash_drift(file_path))
@@ -224,7 +296,7 @@ def _aggregate_features(frames, info, drift):
 def analyze_video(file_path, filename, size_bytes):
     start = time.time()
     info = _probe_video(file_path)
-    frames = _extract_frames(file_path)
+    frames, raw_frames = _extract_frames(file_path)
     drift = _hash_drift(file_path)
     file_hash = _sha256(file_path)
     shared = _aggregate_features(frames, info, drift) or {
@@ -306,7 +378,7 @@ def analyze_video(file_path, filename, size_bytes):
     try:
         from services.video_detector import video_detector
         if video_detector.available():
-            cnn_info = video_detector.predict(file_path)
+            cnn_info = video_detector.predict(file_path, frames=raw_frames)
             if cnn_info and cnn_info.get("fake_probability") is not None:
                 cnn_fake_pct = cnn_info["fake_probability"] * 100.0
                 base = max(0.0, min(1.0,

@@ -118,6 +118,11 @@ class Config:
     # Number of frames sampled from a user's video for the trained CNN pass
     # and for the frame-level features (fused into the reference comparison).
     VIDEO_FRAME_SAMPLE_SIZE = int(os.environ.get("VIDEO_FRAME_SAMPLE_SIZE", 12))
+    # Max dimension (longer side, px) of sampled video frames before feature
+    # extraction / CNN scoring. Downscaling keeps high-res scans fast while the
+    # relative features stay comparable to the reference profile (which is
+    # built through the exact same path).
+    VIDEO_FRAME_MAX_DIM = int(os.environ.get("VIDEO_FRAME_MAX_DIM", 720))
     # Max frames extracted per video when building the train/test frame-set.
     VIDEO_DATASET_FRAMES_PER_VIDEO = int(os.environ.get("VIDEO_DATASET_FRAMES_PER_VIDEO", 8))
     # Downscale target when building frame-sets (keeps datasets small but
