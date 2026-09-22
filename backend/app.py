@@ -267,6 +267,14 @@ def create_app(config_class=Config):
                 target=kaggle_reference.ensure_built, daemon=True, args=("video",)
             ).start()
 
+    # Pre-load the trained video frame-CNN in the background so the very first
+    # video scan of a fresh process doesn't stall on the one-time model load.
+    try:
+        from services.video_detector import video_detector
+        threading.Thread(target=video_detector.preload, daemon=True).start()
+    except Exception:  # noqa: BLE001
+        pass
+
     return app
 
 

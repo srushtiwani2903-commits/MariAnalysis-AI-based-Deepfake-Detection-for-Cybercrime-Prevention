@@ -41,6 +41,16 @@ class _VideoDetector:
         except Exception:  # noqa: BLE001
             return False
 
+    def preload(self):
+        """Warm the model + torch in the background (no-op if unavailable)."""
+        if not self.available():
+            return
+        try:
+            self._ensure_loaded()
+            logger.info("Video CNN preloaded for faster first scan.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Video CNN preload failed: %s", exc)
+
     def _torch(self):
         import torch
         return torch
