@@ -38,7 +38,7 @@ export default function RealtimeCam() {
         await videoRef.current.play();
       }
       setActive(true);
-      setHint("Camera live. Sending a frame to the detector every ~1s.");
+      setHint("Camera live. Sending a frame to the detector every ~1.5s.");
     } catch (e) {
       setErr("Camera unavailable. Allow webcam permission and retry, or use the Camera tab on a phone.");
     }
@@ -47,8 +47,9 @@ export default function RealtimeCam() {
   useEffect(() => {
     if (!active) return;
     let alive = true;
+    let inFlight = false;
     const tick = async () => {
-      if (!alive || busy) return;
+      if (!alive || inFlight) return;
       const v = videoRef.current, c = canvasRef.current;
       if (!v || v.readyState < 2) return;
       c.width = v.videoWidth || 640;
@@ -56,24 +57,24 @@ export default function RealtimeCam() {
       c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
       const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.7));
       if (!alive) return;
+      inFlight = true;
       setBusy(true);
       try {
         const form = new FormData();
-        form.append("frame", blob, "frame.jpg");
-        const { data } = await api.post("/detect/realtime", form, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        form.append("file", blob, "frame.jpg");
+        const { data } = await api.post("/detect/realtime", form);
         if (alive) setResult(data.result || data);
       } catch {
         if (alive) setErr("Could not reach the detector. Is the backend running?");
       } finally {
         setBusy(false);
+        inFlight = false;
       }
     };
     tick();
-    const iv = setInterval(tick, 1100);
+    const iv = setInterval(tick, 1600);
     return () => { alive = false; clearInterval(iv); };
-  }, [active, busy]);
+  }, [active]);
 
   useEffect(() => () => stop(), []);
 
@@ -162,7 +163,7 @@ export default function RealtimeCam() {
             label={result ? "Manipulation likelihood" : "Awaiting first frame"} />
           <div className="w-full space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-slate-500">Detected faces</span>
-              <span className="font-mono">{result?.faces_detected ?? result?.face_count ?? "—"}</span></div>
+              <span className="font-mono">{result?.features?.faces_detected ?? result?.face_analysis?.faces_detected ?? "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Signal confidence</span>
               <span className="font-mono">{result?.confidence ?? "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Status</span>
