@@ -485,12 +485,20 @@ def analyze_image(file_path, filename, size_bytes):
     # EXIF, inflating recompression_similarity without any AI manipulation - so
     # a real photo downloaded from a social post can false-positive. Real AI
     # edits/manipulation are LOCALISED, which shows up as a HIGH
-    # ela_local_variance instead of a uniform whole-image recompress.
+    # ela_local_variance instead of a uniform whole-image recompress. Genuine
+    # AI output re-compresses uniformly too, so the guard ONLY applies when no
+    # other AI-forward signal (spectral/noise/texture) independently agrees.
+    ai_leaning = (
+        spectral_score >= 0.45
+        or noise_score >= 0.45
+        or texture_score >= 0.80
+    )
     global_recompress = (
         recomp_score >= 0.60
         and ela_local_variance < 0.25
         and not meta.get("has_ai_generator_tag")
         and not is_real_camera
+        and not ai_leaning
     )
     effective_recomp = recomp_score * 0.35 if global_recompress else recomp_score
     if global_recompress:
