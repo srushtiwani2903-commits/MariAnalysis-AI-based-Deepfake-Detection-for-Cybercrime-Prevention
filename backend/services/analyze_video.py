@@ -17,6 +17,17 @@ from services.ensemble import (build_models, classify_ai_origin, explain_short,
                                trust_score)
 
 
+_DEBUG_LOG = r"C:\Users\VICTUS\AppData\Local\Temp\opencode\video_debug.log"
+
+
+def _debug_line(msg):
+    try:
+        with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _probe_video(file_path):
     """Basic metadata probe via OpenCV (if installed) else filesystem info."""
     info = {"size_bytes": os.path.getsize(file_path)}
@@ -115,6 +126,7 @@ def _read_sampled_frames(file_path, indices):
     import cv2
     frames = []
     cap = cv2.VideoCapture(file_path)
+    mode = "unknown"
     try:
         want = sorted(indices)
         if not want:
@@ -141,6 +153,7 @@ def _read_sampled_frames(file_path, indices):
                     break
                 frames.append(frame)
         if not seekable or len(frames) < len(want):
+            mode = "sequential-fallback"
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             frames, pos, wi = [], -1, 0
             while wi < len(want):
@@ -151,6 +164,9 @@ def _read_sampled_frames(file_path, indices):
                 if pos == want[wi]:
                     frames.append(frame)
                     wi += 1
+        else:
+            mode = "seek"
+        _debug_line(f"read_sampled frames={len(frames)} mode={mode} count={len(want)}")
     finally:
         cap.release()
     return frames
@@ -299,10 +315,14 @@ def _aggregate_features(frames, info, drift):
 
 def analyze_video(file_path, filename, size_bytes):
     start = time.time()
+    t_probe = time.time()
     info = _probe_video(file_path)
+    t_extract = time.time()
     frames, raw_frames = _extract_frames(file_path)
+    t_hash = time.time()
     drift = _hash_drift(file_path)
     file_hash = _sha256(file_path)
+    t_feats = time.time()
     shared = _aggregate_features(frames, info, drift) or {
         "face_presence": 0.0, "synthetic_smoothness": 0.0, "temporal_flicker": 0.0,
         "texture_uniformity": 0.5, "error_level_analysis": 0.5, "frame_count": 0,
@@ -447,6 +467,10 @@ def analyze_video(file_path, filename, size_bytes):
         })
 
     elapsed = int((time.time() - start) * 1000)
+    _debug_line(f"analyze_video total={elapsed}ms "
+                f"probe={int((t_extract - t_probe) * 1000)}ms "
+                f"extract={int((t_hash - t_extract) * 1000)}ms "
+                f"hash={int((t_feats - t_hash) * 1000)}ms")
     return {
         "scan_type": "video",
         "filename": filename,
@@ -464,6 +488,12 @@ def analyze_video(file_path, filename, size_bytes):
         "processing_time_ms": elapsed,
         "metadata": {**{k: v for k, v in info.items() if not isinstance(v, bytes)},
                      "file_hash_sha256": file_hash},
+        "processing_breakdown": {
+            "probe_ms": int((t_extract - t_probe) * 1000),
+            "extract_ms": int((t_hash - t_extract) * 1000),
+            "hash_ms": int((t_feats - t_hash) * 1000),
+            "analysis_ms": int((time.time() - t_feats) * 1000),
+        },
         "features": features,
         "models": models,
         "reasons": reasons,
