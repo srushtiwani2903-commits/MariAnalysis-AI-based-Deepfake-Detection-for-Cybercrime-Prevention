@@ -64,8 +64,8 @@ export default function RealtimeCam() {
         form.append("file", blob, "frame.jpg");
         const { data } = await api.post("/detect/realtime", form);
         if (alive) setResult(data.result || data);
-      } catch {
-        if (alive) setErr("Could not reach the detector. Is the backend running?");
+      } catch (e) {
+        if (alive) setErr(e?.message || "Could not reach the detector. Is the backend running?");
       } finally {
         setBusy(false);
         inFlight = false;
