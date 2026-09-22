@@ -193,33 +193,37 @@ def _extract_frames(file_path, max_frames=None):
         if count <= 0:
             count = 240
         indices = _frame_targets(count, max_frames)
-        for idx, frame in zip(indices, _read_sampled_frames(file_path, indices)):
-            small = _frame_for_processing(frame)
-            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            face = _detect_face(gray)
-            frame_feats = {}
+        sampled = _read_sampled_frames(file_path, indices)
+        for idx, frame in zip(indices, sampled):
             try:
-                rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-                from PIL import Image
-                frame_feats = feature_vector(Image.fromarray(rgb))
+                small = _frame_for_processing(frame)
+                gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                face = _detect_face(gray)
+                frame_feats = {}
+                try:
+                    rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                    from PIL import Image
+                    frame_feats = feature_vector(Image.fromarray(rgb))
+                except Exception:  # noqa: BLE001
+                    pass
+                frames.append({
+                    "index": idx,
+                    "timestamp": round(idx / fps, 2) if fps else 0,
+                    "has_face": face["has_face"],
+                    "face_w": face["width"],
+                    "face_h": face["height"],
+                    "face_consistency": face["face_consistency"],
+                    "lighting_consistency": face["lighting_consistency"],
+                    "sharpness": float(gray.var()) if gray.size else 0,
+                    "mean_luma": float(gray.mean()) if gray.size else 0,
+                    "ela": frame_feats.get("error_level_analysis"),
+                    "texture": frame_feats.get("texture_uniformity"),
+                    "recomp": frame_feats.get("recompression_similarity"),
+                    "entropy": frame_feats.get("histogram_entropy"),
+                })
+                raw_frames.append(small)
             except Exception:  # noqa: BLE001
-                pass
-            frames.append({
-                "index": idx,
-                "timestamp": round(idx / fps, 2) if fps else 0,
-                "has_face": face["has_face"],
-                "face_w": face["width"],
-                "face_h": face["height"],
-                "face_consistency": face["face_consistency"],
-                "lighting_consistency": face["lighting_consistency"],
-                "sharpness": float(gray.var()) if gray.size else 0,
-                "mean_luma": float(gray.mean()) if gray.size else 0,
-                "ela": frame_feats.get("error_level_analysis"),
-                "texture": frame_feats.get("texture_uniformity"),
-                "recomp": frame_feats.get("recompression_similarity"),
-                "entropy": frame_feats.get("histogram_entropy"),
-            })
-            raw_frames.append(small)
+                continue
     except Exception:
         pass
     return frames, raw_frames
