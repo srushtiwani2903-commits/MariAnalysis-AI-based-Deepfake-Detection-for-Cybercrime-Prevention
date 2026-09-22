@@ -6,6 +6,7 @@ persists ScanHistory/AIPrediction and returns the full result.
 """
 import html
 import os
+from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -268,7 +269,19 @@ def detect_realtime():
     """Analyse a single webcam frame for live deepfake detection. Never stored."""
     if _rate_limit():
         return jsonify({"message": "Too many requests. Try again later."}), 429
-    file = request.files.get("file")
+    file = request.files.get("file") or request.files.get("frame")
+    if file is None:
+        try:
+            first = request.get_data(cache=False)[:200]
+            with open(r"C:\Users\Harshal\AppData\Local\Temp\opencode\realtime-diag.log", "a",
+                      encoding="utf-8") as f:
+                f.write(f"[{datetime.now().isoformat()}] files={list(request.files.keys())} "
+                        f"form={list(request.form.keys())} ct={request.content_type} "
+                        f"len={request.content_length} first={first}\n")
+        except Exception as e:
+            with open(r"C:\Users\Harshal\AppData\Local\Temp\opencode\realtime-diag.log", "a",
+                      encoding="utf-8") as f:
+                f.write(f"[diag error] {e}\n")
     ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_IMAGE_BYTES, 5 * 1024 * 1024))
     if not ok:
         return jsonify({"message": msg}), 400

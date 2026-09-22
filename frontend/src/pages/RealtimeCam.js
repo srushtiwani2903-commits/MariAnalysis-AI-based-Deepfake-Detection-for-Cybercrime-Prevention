@@ -52,18 +52,20 @@ export default function RealtimeCam() {
       if (!alive || inFlight) return;
       const v = videoRef.current, c = canvasRef.current;
       if (!v || v.readyState < 2) return;
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
       c.width = v.videoWidth || 640;
       c.height = v.videoHeight || 480;
-      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      ctx.drawImage(v, 0, 0, c.width, c.height);
       const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.7));
-      if (!alive) return;
+      if (!alive || !blob) return;
       inFlight = true;
       setBusy(true);
       try {
         const form = new FormData();
-        form.append("file", blob, "frame.jpg");
+        form.append("file", new File([blob], "frame.jpg", { type: "image/jpeg" }));
         const { data } = await api.post("/detect/realtime", form);
-        if (alive) setResult(data.result || data);
+        if (alive) { setResult(data.result || data); setErr(""); }
       } catch (e) {
         if (alive) setErr(e?.message || "Could not reach the detector. Is the backend running?");
       } finally {
@@ -161,6 +163,24 @@ export default function RealtimeCam() {
           <h2 className="text-lg font-bold self-start">Live Signal</h2>
           <ConfidenceGauge value={result?.fake_probability ?? 0}
             label={result ? "Manipulation likelihood" : "Awaiting first frame"} />
+          <div className={`w-full rounded-2xl px-4 py-3 text-center text-sm font-bold tracking-wider ${
+            !result ? "bg-slate-500/10 text-slate-400" :
+            verdict === "FAKE SUSPECTED" ? "bg-rose-500 text-white" :
+            verdict === "AMBIGUOUS" ? "bg-amber-500 text-black" : "bg-emerald-500 text-white"
+          }`}>
+            {result ? verdict.replace("SUSPECTED", "SUSPECTED ⚠") : "START CAMERA"}
+          </div>
+          <div className="w-full">
+            <div className="flex justify-between text-[11px] mb-1">
+              <span className="font-bold text-emerald-500">REAL</span>
+              <span className="font-mono text-slate-400">{Math.round(fake ?? 0)}% fake</span>
+              <span className="font-bold text-rose-500">FAKE</span>
+            </div>
+            <div className="h-3 w-full rounded-full overflow-hidden bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 relative">
+              <div className="absolute inset-y-0 bg-white/70 border-r-2 border-black"
+                style={{ left: `calc(${(fake ?? 0)}% - 1px)`, width: "2px" }} />
+            </div>
+          </div>
           <div className="w-full space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-slate-500">Detected faces</span>
               <span className="font-mono">{result?.features?.faces_detected ?? result?.face_analysis?.faces_detected ?? "—"}</span></div>
