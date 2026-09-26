@@ -64,7 +64,9 @@ export default function RealtimeCam() {
       try {
         const form = new FormData();
         form.append("file", new File([blob], "frame.jpg", { type: "image/jpeg" }));
-        const { data } = await api.post("/detect/realtime", form);
+        const { data } = await api.post("/detect/realtime", form, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
         if (alive) { setResult(data.result || data); setErr(""); }
       } catch (e) {
         if (alive) setErr(e?.message || "Could not reach the detector. Is the backend running?");
