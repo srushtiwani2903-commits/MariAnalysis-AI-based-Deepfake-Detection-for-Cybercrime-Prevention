@@ -60,7 +60,7 @@ export default function Footer() {
       </div>
       <div className="border-t border-slate-200 dark:border-white/10 py-4">
         <p className="text-center text-xs text-slate-500 dark:text-slate-500">
-          © {new Date().getFullYear()} MariAnalysis · Built to help you spot the fakes
+          Made with care for a safer digital world
         </p>
       </div>
     </footer>

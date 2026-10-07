@@ -2,6 +2,19 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
+  Chart as ChartJS,
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
+import { Bar, Doughnut, Pie } from "react-chartjs-2";
+import {
   DocumentMagnifyingGlassIcon,
   ShieldExclamationIcon,
   ShieldCheckIcon,
@@ -24,7 +37,10 @@ import StatCard from "../components/StatCard";
 import ResultBadge from "../components/ResultBadge";
 import api from "../api/api";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { humanSize, timeAgo, formatDate } from "../utils/format";
+
+ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Filler);
 
 const detectors = [
   { to: "/detect/image", icon: PhotoIcon, title: "Image Detection", desc: "PNG, JPG, GIF, WebP, AVIF, HEIC, RAW, PSD + more", color: "accent-imgscan-dark from-neon-blue to-neon-cyan" },
@@ -43,15 +59,22 @@ const tools = [
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { dark } = useTheme();
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);
   const [loadError, setLoadError] = useState("");
+  const [byType, setByType] = useState({ image: 0, video: 0, audio: 0, text: 0 });
 
   useEffect(() => {
-    Promise.all([api.get("/history/stats"), api.get("/history?limit=5")])
-      .then(([s, h]) => {
+    Promise.all([
+      api.get("/history/stats"),
+      api.get("/history?limit=5"),
+      api.get("/analytics/by-type"),
+    ])
+      .then(([s, h, bt]) => {
         setStats(s.data);
         setRecent(h.data.items);
+        setByType(bt.data);
         setLoadError("");
       })
       .catch((err) => {
@@ -102,6 +125,121 @@ export default function Dashboard() {
         <StatCard icon={ShieldExclamationIcon} label="Fake Detected" value={stats?.fake_detected ?? "—"} color="from-rose-500 to-red-500" delay={0.1} />
         <StatCard icon={ShieldCheckIcon} label="Real Detected" value={stats?.real_detected ?? "—"} color="from-emerald-500 to-green-500" delay={0.2} />
         <StatCard icon={ChartBarIcon} label="Detection Accuracy" value={stats?.accuracy ?? "—"} suffix="%" color="from-neon-purple to-fuchsia-500" delay={0.3} />
+      </div>
+
+      {/* Scans by Type - Visual Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <GlassCard className="h-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Scans by Media Type
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Total breakdown</p>
+          </div>
+          <div className="h-72">
+            <Bar
+              data={{
+                labels: ["Image", "Video", "Audio", "Text"],
+                datasets: [
+                  {
+                    label: "Total Scans",
+                    data: [byType.image, byType.video, byType.audio, byType.text],
+                    backgroundColor: [
+                      dark ? "rgba(34, 211, 238, 0.85)" : "rgba(21, 128, 61, 0.85)",
+                      dark ? "rgba(124, 58, 237, 0.85)" : "rgba(6, 95, 70, 0.85)",
+                      dark ? "rgba(236, 72, 153, 0.85)" : "rgba(4, 120, 87, 0.85)",
+                      dark ? "rgba(245, 158, 11, 0.85)" : "rgba(15, 118, 110, 0.85)",
+                    ],
+                    borderColor: [
+                      dark ? "#22d3ee" : "#15803d",
+                      dark ? "#7c3aed" : "#065f46",
+                      dark ? "#ec4899" : "#047857",
+                      dark ? "#f59e0b" : "#0f766e",
+                    ],
+                    borderWidth: 1,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    backgroundColor: dark ? "#0a0e27" : "#fff",
+                    titleColor: dark ? "#e2e8f0" : "#0f172a",
+                    bodyColor: dark ? "#94a3b8" : "#475569",
+                    borderColor: dark ? "#22d3ee" : "#15803d",
+                    borderWidth: 1,
+                  },
+                },
+                scales: {
+                  x: {
+                    ticks: { color: dark ? "#94a3b8" : "#64748b" },
+                    grid: { color: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)" },
+                  },
+                  y: {
+                    ticks: { color: dark ? "#94a3b8" : "#64748b", beginAtZero: true, precision: 0 },
+                    grid: { color: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)" },
+                  },
+                },
+              }}
+            />
+          </div>
+        </GlassCard>
+
+        <GlassCard className="h-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Scan Distribution
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">By scan type</p>
+          </div>
+          <div className="h-72 flex items-center justify-center">
+            <Pie
+              data={{
+                labels: ["Image", "Video", "Audio", "Text"],
+                datasets: [
+                  {
+                    data: [byType.image, byType.video, byType.audio, byType.text],
+                    backgroundColor: [
+                      dark ? "rgba(34, 211, 238, 0.9)" : "rgba(21, 128, 61, 0.9)",
+                      dark ? "rgba(124, 58, 237, 0.9)" : "rgba(6, 95, 70, 0.9)",
+                      dark ? "rgba(236, 72, 153, 0.9)" : "rgba(4, 120, 87, 0.9)",
+                      dark ? "rgba(245, 158, 11, 0.9)" : "rgba(15, 118, 110, 0.9)",
+                    ],
+                    borderColor: [
+                      dark ? "#22d3ee" : "#15803d",
+                      dark ? "#7c3aed" : "#065f46",
+                      dark ? "#ec4899" : "#047857",
+                      dark ? "#f59e0b" : "#0f766e",
+                    ],
+                    borderWidth: 1.5,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    labels: {
+                      color: dark ? "#e2e8f0" : "#0f172a",
+                      font: { size: 11 },
+                    },
+                  },
+                  tooltip: {
+                    backgroundColor: dark ? "#0a0e27" : "#fff",
+                    titleColor: dark ? "#e2e8f0" : "#0f172a",
+                    bodyColor: dark ? "#94a3b8" : "#475569",
+                    borderColor: dark ? "#22d3ee" : "#15803d",
+                    borderWidth: 1,
+                  },
+                },
+              }}
+            />
+          </div>
+        </GlassCard>
       </div>
 
       {/* Detector quick access */}
