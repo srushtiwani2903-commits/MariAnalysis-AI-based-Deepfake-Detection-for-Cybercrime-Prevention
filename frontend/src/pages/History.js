@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   MagnifyingGlassIcon, TrashIcon, ArrowDownTrayIcon,
   ClockIcon, ExclamationTriangleIcon, FunnelIcon,
+  PhotoIcon, FilmIcon, MusicalNoteIcon, DocumentTextIcon,
 } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
 import api from "../api/api";
@@ -13,18 +14,20 @@ const FILTERS = ["all", "image", "video", "audio", "text"];
 const RESULTS = ["all", "fake", "authentic", "inconclusive"];
 
 export default function History() {
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
-  const [type, setType] = useState("all");
-  const [result, setResult] = useState("all");
+  const [type, setType] = useState(searchParams.get("type") || "all");
+  const [result, setResult] = useState(searchParams.get("result") || "all");
+  const [activeTab, setActiveTab] = useState(searchParams.get("type") || "all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const fetchData = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ page, limit: 10 });
+    const params = new URLSearchParams({ page, limit: 50 });
     if (q) params.set("q", q);
     if (type !== "all") params.set("type", type);
     if (result !== "all") params.set("result", result);
@@ -83,6 +86,34 @@ export default function History() {
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="flex flex-wrap gap-2 bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl p-2 rounded-xl border border-slate-200 dark:border-white/10">
+        {[
+          { key: "all", label: "All Scans", icon: ClockIcon, color: "from-cyan-400 to-blue-500" },
+          { key: "image", label: "Image Scans", icon: PhotoIcon, color: "from-blue-400 to-indigo-500" },
+          { key: "video", label: "Video Scans", icon: FilmIcon, color: "from-purple-400 to-violet-500" },
+          { key: "audio", label: "Audio Scans", icon: MusicalNoteIcon, color: "from-pink-400 to-rose-500" },
+          { key: "text", label: "Text Scans", icon: DocumentTextIcon, color: "from-orange-400 to-red-500" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => {
+              setActiveTab(tab.key);
+              setType(tab.key);
+              setPage(1);
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.key
+                ? `bg-gradient-to-r ${tab.color} text-white shadow-lg`
+                : "text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-white/5"
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <GlassCard hover={false}>
         <div className="flex flex-wrap gap-3 items-center">
@@ -97,9 +128,6 @@ export default function History() {
           </div>
           <div className="flex items-center gap-2">
             <FunnelIcon className="w-4 h-4 text-slate-400" />
-            <select value={type} onChange={(e) => { setType(e.target.value); setPage(1); }} className="input !w-auto">
-              {FILTERS.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
             <select value={result} onChange={(e) => { setResult(e.target.value); setPage(1); }} className="input !w-auto">
               {RESULTS.map((r) => <option key={r} value={r}>result: {r}</option>)}
             </select>

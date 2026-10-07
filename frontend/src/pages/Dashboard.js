@@ -64,17 +64,20 @@ export default function Dashboard() {
   const [recent, setRecent] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [byType, setByType] = useState({ image: 0, video: 0, audio: 0, text: 0 });
+  const [fakeReal, setFakeReal] = useState({ fake: 0, authentic: 0, inconclusive: 0 });
 
   useEffect(() => {
     Promise.all([
       api.get("/history/stats"),
       api.get("/history?limit=5"),
       api.get("/analytics/by-type"),
+      api.get("/analytics/fake-vs-real"),
     ])
-      .then(([s, h, bt]) => {
+      .then(([s, h, bt, fr]) => {
         setStats(s.data);
         setRecent(h.data.items);
         setByType(bt.data);
+        setFakeReal(fr.data);
         setLoadError("");
       })
       .catch((err) => {
@@ -128,13 +131,12 @@ export default function Dashboard() {
       </div>
 
       {/* Scans by Type - Visual Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <GlassCard className="h-full">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Scans by Media Type
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Total Scans by Type
             </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Total breakdown</p>
           </div>
           <div className="h-72">
             <Bar
@@ -142,25 +144,32 @@ export default function Dashboard() {
                 labels: ["Image", "Video", "Audio", "Text"],
                 datasets: [
                   {
-                    label: "Total Scans",
+                    label: "Scans",
                     data: [byType.image, byType.video, byType.audio, byType.text],
                     backgroundColor: [
-                      dark ? "rgba(34, 211, 238, 0.85)" : "rgba(21, 128, 61, 0.85)",
-                      dark ? "rgba(124, 58, 237, 0.85)" : "rgba(6, 95, 70, 0.85)",
-                      dark ? "rgba(236, 72, 153, 0.85)" : "rgba(4, 120, 87, 0.85)",
-                      dark ? "rgba(245, 158, 11, 0.85)" : "rgba(15, 118, 110, 0.85)",
+                      "rgba(59, 130, 246, 0.9)",
+                      "rgba(139, 92, 246, 0.9)",
+                      "rgba(236, 72, 153, 0.9)",
+                      "rgba(249, 115, 22, 0.9)",
                     ],
                     borderColor: [
-                      dark ? "#22d3ee" : "#15803d",
-                      dark ? "#7c3aed" : "#065f46",
-                      dark ? "#ec4899" : "#047857",
-                      dark ? "#f59e0b" : "#0f766e",
+                      "#3b82f6",
+                      "#8b5cf6",
+                      "#ec4899",
+                      "#f97316",
                     ],
-                    borderWidth: 1,
+                    borderWidth: 1.5,
                   },
                 ],
               }}
               options={{
+                onClick: (e, elements) => {
+                  if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const types = ["image", "video", "audio", "text"];
+                    window.location.href = `/history?type=${types[index]}`;
+                  }
+                },
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
@@ -190,10 +199,55 @@ export default function Dashboard() {
 
         <GlassCard className="h-full">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Scan Distribution
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Fake vs Real
             </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">By scan type</p>
+          </div>
+          <div className="h-72 flex items-center justify-center">
+            <Doughnut
+              data={{
+                labels: ["Fake Detected", "Real Detected", "Inconclusive"],
+                datasets: [
+                  {
+                    data: [fakeReal.fake, fakeReal.authentic, fakeReal.inconclusive],
+                    backgroundColor: [
+                      "rgba(239, 68, 68, 0.9)",
+                      "rgba(16, 185, 129, 0.9)",
+                      "rgba(245, 158, 11, 0.9)",
+                    ],
+                    borderColor: ["#ef4444", "#10b981", "#f59e0b"],
+                    borderWidth: 2,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    labels: {
+                      color: dark ? "#e2e8f0" : "#0f172a",
+                      font: { size: 11 },
+                    },
+                  },
+                  tooltip: {
+                    backgroundColor: dark ? "#0a0e27" : "#fff",
+                    titleColor: dark ? "#e2e8f0" : "#0f172a",
+                    bodyColor: dark ? "#94a3b8" : "#475569",
+                    borderColor: dark ? "#22d3ee" : "#15803d",
+                    borderWidth: 1,
+                  },
+                },
+              }}
+            />
+          </div>
+        </GlassCard>
+
+        <GlassCard className="h-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Scan Type Share
+            </h2>
           </div>
           <div className="h-72 flex items-center justify-center">
             <Pie
@@ -203,18 +257,18 @@ export default function Dashboard() {
                   {
                     data: [byType.image, byType.video, byType.audio, byType.text],
                     backgroundColor: [
-                      dark ? "rgba(34, 211, 238, 0.9)" : "rgba(21, 128, 61, 0.9)",
-                      dark ? "rgba(124, 58, 237, 0.9)" : "rgba(6, 95, 70, 0.9)",
-                      dark ? "rgba(236, 72, 153, 0.9)" : "rgba(4, 120, 87, 0.9)",
-                      dark ? "rgba(245, 158, 11, 0.9)" : "rgba(15, 118, 110, 0.9)",
+                      "rgba(34, 211, 238, 0.95)",
+                      "rgba(168, 85, 247, 0.95)",
+                      "rgba(244, 63, 94, 0.95)",
+                      "rgba(249, 115, 22, 0.95)",
                     ],
                     borderColor: [
-                      dark ? "#22d3ee" : "#15803d",
-                      dark ? "#7c3aed" : "#065f46",
-                      dark ? "#ec4899" : "#047857",
-                      dark ? "#f59e0b" : "#0f766e",
+                      "#22d3ee",
+                      "#a855f7",
+                      "#f43f5e",
+                      "#f97316",
                     ],
-                    borderWidth: 1.5,
+                    borderWidth: 2,
                   },
                 ],
               }}
