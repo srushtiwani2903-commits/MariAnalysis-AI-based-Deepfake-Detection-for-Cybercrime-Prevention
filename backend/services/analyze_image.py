@@ -303,6 +303,171 @@ def _face_analysis(path):
     return out
 
 
+def _filter_effect_analysis(path, face):
+    """Detect beauty filters, AR/cosmetic overlays and selective-blur effects.
+
+    A raw camera capture keeps natural skin texture relative to its surroundings
+    and (for portrait/AR filters) blurs or tints parts of the frame. Beauty
+    filters flatten the skin while leaving the eyes sharp, AR effects shift hues
+    outside the skin range, and portrait modes blur the border. Returns a 0..1
+    ``filter_effect`` score plus the component signals.
+    """
+    out = {
+        "filter_effect": 0.0,
+        "skin_smoothing": 0.0,
+        "color_effect": 0.0,
+        "selective_blur": 0.0,
+        "faces_checked": 0,
+    }
+    try:
+        import cv2
+        import numpy as np
+
+        img = cv2.imread(path)
+        if img is None:
+            return out
+        H, W = img.shape[:2]
+        if min(H, W) < 96:
+            return out
+        from utils.cascades import cascade_path
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        boxes = [(a["x"], a["y"], a["w"], a["h"])
+                 for a in face.get("face_areas", []) if a.get("w", 0) >= 32]
+        if not boxes:
+            fc = cv2.CascadeClassifier(cascade_path("haarcascade_frontalface_default.xml"))
+            det = fc.detectMultiScale(gray, 1.1, 5, minSize=(40, 40))
+            boxes = [tuple(int(v) for v in b) for b in (det if det is not None else [])]
+        eye_cascade = cv2.CascadeClassifier(cascade_path("haarcascade_eye.xml"))
+
+        smooth_scores, color_scores = [], []
+        for (bx, by, bw, bh) in boxes[:4]:
+            x0, y0 = max(0, bx), max(0, by)
+            x1, y1 = min(W, bx + bw), min(H, by + bh)
+            fw, fh = x1 - x0, y1 - y0
+            if fw < 24 or fh < 24:
+                continue
+
+            # --- skin smoothing: face interior vs surrounding texture ------ #
+            ex, ey = int(fw * 0.4), int(fh * 0.4)
+            px0, py0 = max(0, x0 - ex), max(0, y0 - ey)
+            px1, py1 = min(W, x1 + ex), min(H, y1 + ey)
+            patch = gray[py0:py1, px0:px1].astype(np.float32)
+            smooth = 0.0
+            if patch.size >= 64:
+                lap = cv2.Laplacian(patch, cv2.CV_32F)
+                ring_mask = np.ones(patch.shape, dtype=bool)
+                ring_mask[y0 - py0:y1 - py0, x0 - px0:x1 - px0] = False
+                face_lap = lap[~ring_mask]
+                ring_lap = lap[ring_mask]
+                face_hf = float(face_lap.var()) if face_lap.size else 0.0
+                ring_hf = float(ring_lap.var()) if ring_lap.size else 0.0
+                # skin strip: lower half of the face (cheeks / chin, below eyes)
+                skin = gray[y0 + fh // 2:y1, x0 + fw // 6:x1 - fw // 6]
+                skin_hf = (float(cv2.Laplacian(skin.astype(np.float32), cv2.CV_32F).var())
+                           if skin.size >= 64 else face_hf)
+                ratio = skin_hf / (ring_hf + 1e-6)
+                ring_based = 0.0
+                if ring_hf > 6.0:
+                    if ratio < 0.06:
+                        ring_based = 1.0
+                    elif ratio < 0.12:
+                        ring_based = 0.85
+                    elif ratio < 0.20:
+                        ring_based = 0.60
+                    elif ratio < 0.30:
+                        ring_based = 0.35
+                    elif ratio < 0.45:
+                        ring_based = 0.15
+                # absolute dead-flat skin against a textured background
+                abs_based = 0.75 if (skin_hf < 3.0 and ring_hf > 15.0) else 0.0
+                # eyes stay sharp while the skin is smoothed => beauty filter
+                eye_based = 0.0
+                eyes = eye_cascade.detectMultiScale(gray[y0:y1, x0:x1], 1.1, 5,
+                                                     minSize=(10, 10))
+                if len(eyes) >= 1 and skin_hf > 0:
+                    eye_hfs = []
+                    for (exx, eyy, ew, ehh) in eyes[:2]:
+                        eg = gray[y0 + eyy:y0 + eyy + ehh, x0 + exx:x0 + exx + ew]
+                        if eg.size >= 16:
+                            eye_hfs.append(float(cv2.Laplacian(
+                                eg.astype(np.float32), cv2.CV_32F).var()))
+                    if eye_hfs:
+                        eye_ratio = (sum(eye_hfs) / len(eye_hfs)) / (skin_hf + 1e-6)
+                        if eye_ratio >= 10:
+                            eye_based = 1.0
+                        elif eye_ratio >= 6:
+                            eye_based = 0.75
+                        elif eye_ratio >= 4:
+                            eye_based = 0.45
+                smooth = max(ring_based, abs_based, eye_based)
+            smooth_scores.append(min(1.0, smooth))
+
+            # --- hue / saturation cosmetics (AR tint, lipstick, neon) ------ #
+            hsv = cv2.cvtColor(img[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
+            Hc, Sc, Vc = cv2.split(hsv)
+            colored = (Vc > 50) & (Sc > 45)  # ignore shadows and grey/white
+            if int(colored.sum()) >= 32:
+                hue = Hc[colored]
+                skin_hue = ((hue >= 2) & (hue <= 28)) | ((hue >= 155) & (hue <= 179))
+                non_skin = float((~skin_hue).mean())
+                sat = float((Sc[colored] / 255.0).mean())
+                col = 0.0
+                if non_skin > 0.50:
+                    col = 0.90
+                elif non_skin > 0.35:
+                    col = 0.70
+                elif non_skin > 0.22:
+                    col = 0.45
+                elif non_skin > 0.14:
+                    col = 0.25
+                if sat > 0.62:
+                    col = min(1.0, col + 0.30)
+                elif sat > 0.50:
+                    col = min(1.0, col + 0.15)
+                color_scores.append(col)
+
+        # --- selective blur / vignette (portrait & AR background effects) --- #
+        g = gray.astype(np.float32)
+        b_lap = cv2.Laplacian(g, cv2.CV_32F)
+        m = max(8, min(H, W) // 12)
+        border = np.concatenate([b_lap[:m, :].ravel(), b_lap[-m:, :].ravel(),
+                                 b_lap[:, :m].ravel(), b_lap[:, -m:].ravel()])
+        center = b_lap[H // 4:H * 3 // 4, W // 4:W * 3 // 4]
+        border_hf = float(border.var())
+        center_hf = float(center.var()) if center.size else 0.0
+        blur = 0.0
+        if center_hf > 5.0:
+            br = border_hf / (center_hf + 1e-6)
+            if br < 0.10:
+                blur = 0.80
+            elif br < 0.18:
+                blur = 0.60
+            elif br < 0.28:
+                blur = 0.35
+            elif br < 0.40:
+                blur = 0.15
+
+        # strongest face drives the score (filters apply to every visible face)
+        sm = max(smooth_scores) if smooth_scores else 0.0
+        co = max(color_scores) if color_scores else 0.0
+        score = 0.50 * sm + 0.32 * co + 0.18 * blur
+        # heavy combined evidence floors so a clear filter always registers
+        if sm >= 0.8 and co >= 0.5:
+            score = max(score, 0.78)
+        elif sm >= 0.6 and co >= 0.65:
+            score = max(score, 0.75)
+        out.update({
+            "filter_effect": round(min(1.0, score), 4),
+            "skin_smoothing": round(sm, 4),
+            "color_effect": round(co, 4),
+            "selective_blur": round(blur, 4),
+            "faces_checked": len(smooth_scores),
+        })
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
 def _extract_metadata(path):
     """Collect EXIF/IPTC metadata for forensic checks."""
     meta = {}
@@ -411,6 +576,7 @@ def analyze_image(file_path, filename, size_bytes):
     seed_hex = file_hash or hashlib.sha256(open(file_path, "rb").read()[:65536]).hexdigest()
     heatmap_name = _save_heatmap(diff, seed_hex)
     face = _face_analysis(file_path)
+    filt = _filter_effect_analysis(file_path, face)
 
     # -------------------------- heuristic scoring -------------------------- #
     # High localised recompression error points to tampering.
@@ -465,6 +631,10 @@ def analyze_image(file_path, filename, size_bytes):
         "eye_blink_pattern": round(face["eye_blink_pattern"], 4),
         "lighting_consistency": round(face["lighting_consistency"], 4),
         "faces_detected": face["faces_detected"],
+        "filter_effect": round(filt["filter_effect"], 4),
+        "skin_smoothing": round(filt["skin_smoothing"], 4),
+        "color_effect": round(filt["color_effect"], 4),
+        "selective_blur": round(filt["selective_blur"], 4),
         "resolution": f"{img.width}x{img.height}",
     }
 
@@ -516,6 +686,7 @@ def analyze_image(file_path, filename, size_bytes):
         + 0.05 * face_score        # Face heuristics
         + 0.17 * spectral_effective  # frequency domain artifacts
         + 0.11 * noise_effective     # unnatural noise patterns
+        + 0.10 * filt["filter_effect"]  # beauty filter / AR effect on the face
     )
     base = max(0.0, min(1.0, base + (lighting_score * 0.03 if face_weight else 0.0)))
 
@@ -536,6 +707,8 @@ def analyze_image(file_path, filename, size_bytes):
         ai_signals += 1
     if meta.get("has_ai_generator_tag"):
         ai_signals += 2  # Strong signal
+    if filt["filter_effect"] >= 0.6:
+        ai_signals += 1  # cosmetic/AR filter applied to the face
 
     # Boost only when 4+ signals agree (genuine AI output)
     if ai_signals >= 5:
@@ -584,9 +757,24 @@ def analyze_image(file_path, filename, size_bytes):
     real_scores = {"CNN (EfficientNet)": cnn_fake_pct} if cnn_fake_pct is not None else None
     models, fake_probability = build_models("image", base * 100, filename, spread=4.0,
                                             real_scores=real_scores)
+
+    # --------------------- beauty-filter / AR floor ------------------------ #
+    # A filtered or effect-covered face is never a raw authentic capture, so
+    # the verdict can never come back "authentic" when the filter detector is
+    # confident: moderate evidence floors the score at inconclusive, strong
+    # combined evidence (skin smoothing + hue shift / selective blur) at fake.
+    filter_score = filt["filter_effect"]
+    if filter_score >= 0.75:
+        fake_probability = max(fake_probability, 62.0)
+    elif filter_score >= 0.50:
+        fake_probability = max(fake_probability, 45.0)
+
     result, _risk = _interpret(fake_probability)
     risk = risk_label(fake_probability)
     ai_origin = classify_ai_origin("image", features, fake_probability)
+    if filter_score >= 0.5 and ai_origin == "authentic":
+        # a cosmetically filtered face is a modified capture, not a raw one
+        ai_origin = "ai_manipulated"
     susp = suspicious_scale(fake_probability, ai_origin, features, "image")
     reasons = reasons_from_features("image", features, fake_probability)
     if cnn_fake_pct is not None:
