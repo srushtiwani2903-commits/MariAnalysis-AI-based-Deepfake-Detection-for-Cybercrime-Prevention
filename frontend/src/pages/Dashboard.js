@@ -99,7 +99,7 @@ export default function Dashboard() {
         animate={{ opacity: 1, y: 0 }}
         className="glass-strong p-8 relative overflow-hidden"
       >
-        <div className="scan-overlay opacity-30" />
+
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
             <p className="text-sm text-neon-blue font-medium">My Dashboard</p>
