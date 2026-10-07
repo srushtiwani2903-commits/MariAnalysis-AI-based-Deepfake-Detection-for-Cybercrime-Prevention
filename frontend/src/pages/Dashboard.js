@@ -221,6 +221,11 @@ export default function Dashboard() {
                 ],
               }}
               options={{
+                onClick: (e, elements) => {
+                  if (elements.length > 0) {
+                    window.location.href = `/history`;
+                  }
+                },
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
@@ -273,6 +278,13 @@ export default function Dashboard() {
                 ],
               }}
               options={{
+                onClick: (e, elements) => {
+                  if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const types = ["image", "video", "audio", "text"];
+                    window.location.href = `/history?type=${types[index]}`;
+                  }
+                },
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
