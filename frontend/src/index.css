@@ -39,6 +39,21 @@
     color: inherit;
   }
 
+  /* Native <select> popups: some browsers (Windows Chrome/Edge) paint the
+     option list with the select's inherited light text over a white popup
+     in dark mode, which makes the choices invisible. Force readable
+     colours for the option list in both themes. */
+  select option,
+  select optgroup {
+    background-color: #ffffff;
+    color: #0f172a;
+  }
+  html.dark select option,
+  html.dark select optgroup {
+    background-color: #1e293b;
+    color: #e2e8f0;
+  }
+
   /* Custom scrollbar */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
