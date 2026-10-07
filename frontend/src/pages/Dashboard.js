@@ -13,7 +13,7 @@ import {
   Legend,
   Filler,
 } from "chart.js";
-import { Bar, Doughnut, Pie } from "react-chartjs-2";
+import { Bar, Doughnut, Line } from "react-chartjs-2";
 import {
   DocumentMagnifyingGlassIcon,
   ShieldExclamationIcon,
@@ -147,18 +147,18 @@ export default function Dashboard() {
                     label: "Scans",
                     data: [byType.image, byType.video, byType.audio, byType.text],
                     backgroundColor: [
+                      "rgba(239, 68, 68, 0.9)",
                       "rgba(59, 130, 246, 0.9)",
-                      "rgba(139, 92, 246, 0.9)",
-                      "rgba(236, 72, 153, 0.9)",
+                      "rgba(168, 85, 247, 0.9)",
                       "rgba(249, 115, 22, 0.9)",
                     ],
                     borderColor: [
+                      "#ef4444",
                       "#3b82f6",
-                      "#8b5cf6",
-                      "#ec4899",
+                      "#a855f7",
                       "#f97316",
                     ],
-                    borderWidth: 1.5,
+                    borderWidth: 2,
                   },
                 ],
               }}
@@ -200,22 +200,23 @@ export default function Dashboard() {
         <GlassCard className="h-full">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold flex items-center gap-2">
-              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Fake vs Real
+              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Fake vs Real Trend
             </h2>
           </div>
-          <div className="h-72 flex items-center justify-center">
-            <Doughnut
+          <div className="h-72">
+            <Bar
               data={{
-                labels: ["Fake Detected", "Real Detected", "Inconclusive"],
+                labels: ["Fake", "Real", "Inconclusive"],
                 datasets: [
                   {
+                    label: "Count",
                     data: [fakeReal.fake, fakeReal.authentic, fakeReal.inconclusive],
                     backgroundColor: [
-                      "rgba(239, 68, 68, 0.9)",
-                      "rgba(16, 185, 129, 0.9)",
-                      "rgba(245, 158, 11, 0.9)",
+                      "rgba(239, 68, 68, 0.95)",
+                      "rgba(16, 185, 129, 0.95)",
+                      "rgba(249, 115, 22, 0.95)",
                     ],
-                    borderColor: ["#ef4444", "#10b981", "#f59e0b"],
+                    borderColor: ["#ef4444", "#10b981", "#f97316"],
                     borderWidth: 2,
                   },
                 ],
@@ -229,18 +230,23 @@ export default function Dashboard() {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                  legend: {
-                    labels: {
-                      color: dark ? "#e2e8f0" : "#0f172a",
-                      font: { size: 11 },
-                    },
-                  },
+                  legend: { display: false },
                   tooltip: {
                     backgroundColor: dark ? "#0a0e27" : "#fff",
                     titleColor: dark ? "#e2e8f0" : "#0f172a",
                     bodyColor: dark ? "#94a3b8" : "#475569",
                     borderColor: dark ? "#22d3ee" : "#15803d",
                     borderWidth: 1,
+                  },
+                },
+                scales: {
+                  x: {
+                    ticks: { color: dark ? "#94a3b8" : "#64748b" },
+                    grid: { color: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)" },
+                  },
+                  y: {
+                    ticks: { color: dark ? "#94a3b8" : "#64748b", beginAtZero: true, precision: 0 },
+                    grid: { color: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)" },
                   },
                 },
               }}
@@ -251,55 +257,56 @@ export default function Dashboard() {
         <GlassCard className="h-full">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold flex items-center gap-2">
-              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Scan Type Share
+              <ChartBarIcon className="w-5 h-5 text-neon-blue" /> Detection Accuracy %
             </h2>
           </div>
-          <div className="h-72 flex items-center justify-center">
-            <Pie
+          <div className="h-72">
+            <Line
               data={{
-                labels: ["Image", "Video", "Audio", "Text"],
+                labels: ["Total", "Fake", "Real"],
                 datasets: [
                   {
-                    data: [byType.image, byType.video, byType.audio, byType.text],
-                    backgroundColor: [
-                      "rgba(34, 211, 238, 0.95)",
-                      "rgba(168, 85, 247, 0.95)",
-                      "rgba(244, 63, 94, 0.95)",
-                      "rgba(249, 115, 22, 0.95)",
+                    label: "Accuracy",
+                    data: [
+                      stats?.accuracy || 0,
+                      fakeReal.fake > 0 ? ((fakeReal.fake / (stats?.total_scans || 1)) * 100).toFixed(1) : 0,
+                      fakeReal.authentic > 0 ? ((fakeReal.authentic / (stats?.total_scans || 1)) * 100).toFixed(1) : 0,
                     ],
-                    borderColor: [
-                      "#22d3ee",
-                      "#a855f7",
-                      "#f43f5e",
-                      "#f97316",
-                    ],
-                    borderWidth: 2,
+                    borderColor: "#8b5cf6",
+                    backgroundColor: "rgba(139, 92, 246, 0.3)",
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: "#f97316",
+                    pointBorderColor: "#fff",
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
                   },
                 ],
               }}
               options={{
-                onClick: (e, elements) => {
-                  if (elements.length > 0) {
-                    const index = elements[0].index;
-                    const types = ["image", "video", "audio", "text"];
-                    window.location.href = `/history?type=${types[index]}`;
-                  }
+                onClick: () => {
+                  window.location.href = `/analytics`;
                 },
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                  legend: {
-                    labels: {
-                      color: dark ? "#e2e8f0" : "#0f172a",
-                      font: { size: 11 },
-                    },
-                  },
+                  legend: { display: false },
                   tooltip: {
                     backgroundColor: dark ? "#0a0e27" : "#fff",
                     titleColor: dark ? "#e2e8f0" : "#0f172a",
                     bodyColor: dark ? "#94a3b8" : "#475569",
                     borderColor: dark ? "#22d3ee" : "#15803d",
                     borderWidth: 1,
+                  },
+                },
+                scales: {
+                  x: {
+                    ticks: { color: dark ? "#94a3b8" : "#64748b" },
+                    grid: { color: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)" },
+                  },
+                  y: {
+                    ticks: { color: dark ? "#94a3b8" : "#64748b", beginAtZero: true, max: 100 },
+                    grid: { color: dark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.08)" },
                   },
                 },
               }}
