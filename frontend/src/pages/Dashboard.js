@@ -25,7 +25,6 @@ import {
   DocumentTextIcon,
   ArrowRightIcon,
   ClockIcon,
-  VideoCameraIcon,
   EnvelopeIcon,
   ShareIcon,
   FingerPrintIcon,
@@ -51,7 +50,6 @@ const detectors = [
 ];
 
 const tools = [
-  { to: "/detect/realtime", icon: VideoCameraIcon, title: "Live Webcam Check", desc: "Real-time frame analysis", color: "from-neon-cyan to-neon-blue" },
   { to: "/detect/live-call", icon: ComputerDesktopIcon, title: "Live Call Check", desc: "Zoom / Meet / WhatsApp call guard", color: "from-teal-400 to-cyan-500" },
   { to: "/detect/email", icon: EnvelopeIcon, title: "Email Scanner", desc: "Phishing & AI-written mail", color: "from-pink-500 to-rose-400" },
   { to: "/detect/social", icon: ShareIcon, title: "Social Post", desc: "Image + caption verification", color: "from-violet-500 to-neon-purple" },

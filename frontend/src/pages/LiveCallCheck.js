@@ -9,7 +9,7 @@ import api from "../api/api";
 
 // Live call guard: share a Zoom / Meet / WhatsApp call window, drag a box
 // around the other person's video, and we send that region to the detector
-// every ~1.6s — same engine as the webcam check, fed by screen capture.
+// every ~1.6s — same engine as the realtime endpoint, fed by screen capture.
 const MAX_OUT_W = 960;
 const TICK_MS = 1600;
 const MAX_FAILS = 3;
@@ -394,6 +394,8 @@ export default function LiveCallCheck() {
               <span className="font-mono">{result?.confidence ?? "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Capture source</span>
               <span className="font-mono">{result?.source === "call" ? "call window" : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Kaggle reference</span>
+              <span className="font-mono">{result?.kaggle_reference_status ?? "ready"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Status</span>
               <span className="font-semibold">{busy ? "analyzing…" : active ? "live" : "idle"}</span></div>
           </div>

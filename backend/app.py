@@ -170,7 +170,7 @@ def create_app(config_class=Config):
                               "POST /api/detect/audio", "POST /api/detect/text",
                               "POST /api/detect/email (phishing scanner)",
                               "POST /api/detect/post (image + caption / fake news)",
-                              "POST /api/detect/realtime (webcam frame, not stored)",
+                              "POST /api/detect/realtime (live call frame, not stored)",
                               "POST /api/detect/url (analyze media from a remote URL)"],
                 "history": ["GET /api/history", "GET /api/history/stats",
                             "GET /api/history/<id>", "DELETE /api/history/<id>"],

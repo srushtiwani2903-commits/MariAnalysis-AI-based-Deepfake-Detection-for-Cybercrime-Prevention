@@ -35,7 +35,7 @@ There's also a learning center for getting familiar with deepfake threats.
 - **Explainable AI checklist** — pass/fail detection reasons (metadata, ELA, compression, noise, face consistency, network age…) shown on results and in the PDF
 - **Manipulation heatmap** — red-region visualisation of AI-altered areas for images (`GET /api/reports/<id>/heatmap`)
 - **Blockchain evidence ledger** — report a detected deepfake as a cybercrime case (ID like `DF-2026-0001`), anchoring file hash + report hash into a chained SHA-256 ledger; verify integrity any time (`/api/evidence/*`)
-- **Live webcam detection** — `/detect/realtime` streams frames for a live fake-confidence gauge (frames never persisted)
+- **Live call detection** — `/detect/live-call` shares a Zoom / Meet / WhatsApp call window and streams the other person's video region for a live fake-confidence gauge (frames never persisted)
 - **Email & phishing scanner** — `/detect/email` scores urgency, links, sender-reply mismatch and AI-written wording
 - **Social post detection** — `/detect/social` analyses an image and its caption together (image + text pipeline)
 - **AI assistant chatbot** — `/api/chat` knowledge base (deepfakes, scams, cyber laws, tool guidance) + floating chat widget
@@ -129,7 +129,7 @@ deepfake-detection/
         │                         # ConfidenceGauge, MultiModelVerdicts, XaiReasons,
         │                         # DeepfakeTimeline, PipelineViz, Chatbot, Leaderboard, guards…
         ├── pages/                # Home, Login, Register, Dashboard, 4 Detectors,
-        │                         # RealtimeCam, EmailDetection, SocialPostDetection,
+        │                         # LiveCallCheck, EmailDetection, SocialPostDetection,
         │                         # Evidence, OrgDashboard, Results, History, Analytics,
         │                         # LearningCenter, About, Contact, Admin, Profile, ApiDocs
         └── utils/format.js       # size / date / risk formatters
@@ -227,7 +227,7 @@ send `Authorization: Bearer <token>`.
 | POST   | `/detect/url`                  | Analyze media from a remote URL      |
 | POST   | `/detect/email`                | Phishing / AI-written email scan     |
 | POST   | `/detect/social`               | Image + caption social post scan     |
-| POST   | `/detect/realtime`             | Live webcam frame check (not stored) |
+| POST   | `/detect/realtime`             | Live call/webcam frame check (not stored) |
 | GET    | `/history`                     | List scans (q/type/result/page)      |
 | GET    | `/history/stats`               | Dashboard summary                    |
 | GET    | `/history/<id>`                | Scan detail (with XAI payload)       |
@@ -293,12 +293,12 @@ Each `--kaggle` fetch downloads the dataset **directly from Kaggle into a temp
 cache, extracts it, is used, then the cache is deleted** — nothing is stored in
 the project. Set `KAGGLE_AUTOSYNC=true` to auto-sync datasets at backend startup.
 
-### 3) Live-scan reference comparison (real-time webcam / URL / extension)
+### 3) Live-scan reference comparison (real-time call / URL / extension)
 
 When `KAGGLE_REFERENCE_ENABLED=true` (default), the first image scan pulls a
 small sample of **real + fake images straight from Kaggle into a temp cache
 (auto-deleted)**, builds per-class feature distributions in-process, and every
-later scan — Live Webcam Check (`/detect/realtime`), URL scan (`/detect/url`)
+later scan — Live Call Check (`/detect/live-call`), URL scan (`/detect/url`)
 and the browser extension (`/extend/analyze`) — is scored against those
 distributions. The reference **blends 25% into the heuristic verdict** and is
 reported in every result as `kaggle_reference` / `kaggle_reference_status`.
