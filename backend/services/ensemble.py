@@ -255,6 +255,7 @@ _REASON_SPECS = {
         ("face_consistency", "Face boundary consistency", "low_is_bad"),
         ("eye_blink_pattern", "Natural eye-blinking pattern", "low_is_bad"),
         ("lighting_consistency", "Consistent lighting", "low_is_bad"),
+        ("filter_effect", "No beauty filter / AR overlay", "high_is_bad"),
     ],
     "video": [
         ("face_presence", "Consistent face presence", "low_is_bad"),

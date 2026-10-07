@@ -390,6 +390,11 @@ export default function LiveCallCheck() {
             <div className="flex justify-between"><span className="text-slate-500">Feed liveness</span>
               <span className={`font-mono font-bold ${result?.liveness?.replay_suspected ? "text-amber-500" : "text-emerald-500"}`}>
                 {result ? (result?.liveness?.replay_suspected ? "FROZEN" : "LIVE") : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Filter / effect</span>
+              <span className={`font-mono font-bold ${(result?.features?.filter_effect ?? 0) >= 0.35 ? "text-amber-500" : "text-emerald-500"}`}>
+                {result ? ((result?.features?.filter_effect ?? 0) >= 0.35
+                  ? `DETECTED ${Math.round((result?.features?.filter_effect ?? 0) * 100)}%`
+                  : "none") : "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Signal confidence</span>
               <span className="font-mono">{result?.confidence ?? "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Capture source</span>
