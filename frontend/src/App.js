@@ -19,6 +19,7 @@ import VideoDetection from "./pages/VideoDetection";
 import AudioDetection from "./pages/AudioDetection";
 import TextDetection from "./pages/TextDetection";
 import RealtimeCam from "./pages/RealtimeCam";
+import LiveCallCheck from "./pages/LiveCallCheck";
 import EmailDetection from "./pages/EmailDetection";
 import SocialPostDetection from "./pages/SocialPostDetection";
 import Evidence from "./pages/Evidence";
@@ -71,6 +72,7 @@ function AnimatedRoutes() {
             <Route path="/detect/audio" element={<AudioDetection />} />
             <Route path="/detect/text" element={<TextDetection />} />
             <Route path="/detect/realtime" element={<RealtimeCam />} />
+            <Route path="/detect/live-call" element={<LiveCallCheck />} />
             <Route path="/detect/email" element={<EmailDetection />} />
             <Route path="/detect/social" element={<SocialPostDetection />} />
             <Route path="/evidence" element={<Evidence />} />

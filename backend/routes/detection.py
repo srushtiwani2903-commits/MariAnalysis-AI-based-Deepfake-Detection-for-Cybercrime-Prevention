@@ -346,6 +346,9 @@ def detect_realtime():
     ok, msg, size = validate_upload(file, Config.ALLOWED_IMAGE, min(Config.MAX_IMAGE_BYTES, 5 * 1024 * 1024))
     if not ok:
         return jsonify({"message": msg}), 400
+    source = str(request.form.get("source") or "webcam")[:16].strip().lower()
+    if source not in ("webcam", "call"):
+        source = "webcam"
     path, stored_name, _ = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
     try:
         result = service.analyze("image", path, stored_name, size)
@@ -354,17 +357,27 @@ def detect_realtime():
         result.pop("scan_id", None)
         result["persisted"] = False
         result["live"] = True
+        result["source"] = source
         faces = result.get("features", {}).get("faces_detected", 0)
         liveness = _liveness_probe(str(get_jwt_identity()), path, faces)
         if liveness is not None:
             if liveness["replay_suspected"]:
-                boost = min(100.0, result.get("fake_probability", 0.0) + 20.0)
-                result["fake_probability"] = round(boost, 1)
-                result["reasons"].append({
-                    "check": "Replay guard: feed is still (no liveness)",
-                    "passed": False,
-                    "detail": "Webcam feed showed a still/static source; treat it as replayed content.",
-                })
+                if source == "call":
+                    # Call feeds freeze on network lag too, so report the still
+                    # feed as an advisory instead of boosting the fake score.
+                    result["reasons"].append({
+                        "check": "Replay guard: feed looks frozen",
+                        "passed": False,
+                        "detail": "The remote feed showed no motion (network freeze or still image). Verify the person through a second channel.",
+                    })
+                else:
+                    boost = min(100.0, result.get("fake_probability", 0.0) + 20.0)
+                    result["fake_probability"] = round(boost, 1)
+                    result["reasons"].append({
+                        "check": "Replay guard: feed is still (no liveness)",
+                        "passed": False,
+                        "detail": "Webcam feed showed a still/static source; treat it as replayed content.",
+                    })
             result["liveness"] = liveness
         return jsonify({"result": result}), 200
     finally:

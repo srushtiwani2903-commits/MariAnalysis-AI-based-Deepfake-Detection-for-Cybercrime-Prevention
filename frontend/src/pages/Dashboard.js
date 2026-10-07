@@ -31,6 +31,7 @@ import {
   FingerPrintIcon,
   BuildingOffice2Icon,
   ExclamationTriangleIcon,
+  ComputerDesktopIcon,
 } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
 import StatCard from "../components/StatCard";
@@ -51,6 +52,7 @@ const detectors = [
 
 const tools = [
   { to: "/detect/realtime", icon: VideoCameraIcon, title: "Live Webcam Check", desc: "Real-time frame analysis", color: "from-neon-cyan to-neon-blue" },
+  { to: "/detect/live-call", icon: ComputerDesktopIcon, title: "Live Call Check", desc: "Zoom / Meet / WhatsApp call guard", color: "from-teal-400 to-cyan-500" },
   { to: "/detect/email", icon: EnvelopeIcon, title: "Email Scanner", desc: "Phishing & AI-written mail", color: "from-pink-500 to-rose-400" },
   { to: "/detect/social", icon: ShareIcon, title: "Social Post", desc: "Image + caption verification", color: "from-violet-500 to-neon-purple" },
   { to: "/evidence", icon: FingerPrintIcon, title: "Report Fraud", desc: "Evidence + case ID", color: "from-amber-400 to-orange-500" },

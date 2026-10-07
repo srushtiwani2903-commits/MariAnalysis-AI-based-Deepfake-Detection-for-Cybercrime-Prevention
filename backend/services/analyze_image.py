@@ -264,10 +264,11 @@ def _face_analysis(path):
         if img is None:
             return out
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        from utils.cascades import cascade_path
         face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+            cascade_path("haarcascade_frontalface_default.xml"))
         eye_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_eye.xml")
+            cascade_path("haarcascade_eye.xml"))
         faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(40, 40))
         out["faces_detected"] = int(len(faces))
         if len(faces) == 0:

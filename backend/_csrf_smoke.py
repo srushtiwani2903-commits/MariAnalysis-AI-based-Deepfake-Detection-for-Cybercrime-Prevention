@@ -14,10 +14,11 @@ def check(name, ok, extra=""):
 
 
 def csrf_headers(r):
-    setcookie = r.headers.get("Set-Cookie", "")
-    m = re.search(r"deepguard_csrf=([^;]+)", setcookie)
-    val = m.group(1) if m else ""
-    return {"X-CSRF-TOKEN": val}
+    for h in r.headers.getlist("Set-Cookie"):
+        m = re.search(r"deepguard_csrf=([^;]+)", h)
+        if m:
+            return {"X-CSRF-TOKEN": m.group(1)}
+    return {"X-CSRF-TOKEN": ""}
 
 
 r = client.get("/api/health")

@@ -75,8 +75,9 @@ def _detect_face(gray):
     try:
         import cv2
         if face_box is None:
+            from utils.cascades import cascade_path
             cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+                cascade_path("haarcascade_frontalface_default.xml"))
             faces = cascade.detectMultiScale(gray, 1.1, 4, minSize=(30, 30))
             if len(faces) > 0:
                 x, y, w, h = faces[0]
@@ -90,8 +91,9 @@ def _detect_face(gray):
         out["width"], out["height"] = w, h
         try:
             import cv2
+            from utils.cascades import cascade_path
             eye_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_eye.xml")
+                cascade_path("haarcascade_eye.xml"))
             face_gray = gray[y:y + h, x:x + w]
             eyes = eye_cascade.detectMultiScale(face_gray, 1.1, 5, minSize=(8, 8))
             eye_ratio = min(1.0, len(eyes) / 2.0)
