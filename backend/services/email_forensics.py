@@ -31,18 +31,23 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@([A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+
 # --------------------------------------------------------------------------- #
 # Active content / script detection
 # --------------------------------------------------------------------------- #
-_SCRIPT_TAGS = (
+_ACTIVE_TAGS = (
     (re.compile(r"<\s*script", re.I), "<script>"),
     (re.compile(r"<\s*iframe", re.I), "<iframe>"),
     (re.compile(r"<\s*object", re.I), "<object>"),
     (re.compile(r"<\s*embed", re.I), "<embed>"),
     (re.compile(r"<\s*form", re.I), "<form>"),
     (re.compile(r"<\s*svg", re.I), "<svg>"),
+    (re.compile(r"<\s*base", re.I), "<base>"),
+)
+_PASSIVE_TAGS = (
     (re.compile(r"<\s*img", re.I), "<img>"),
     (re.compile(r"<\s*meta", re.I), "<meta>"),
     (re.compile(r"<\s*link", re.I), "<link>"),
     (re.compile(r"<\s*style", re.I), "<style>"),
-    (re.compile(r"<\s*base", re.I), "<base>"),
+    (re.compile(r"<\s*audio", re.I), "<audio>"),
+    (re.compile(r"<\s*video", re.I), "<video>"),
+    (re.compile(r"<\s*table", re.I), "<table>"),
     (re.compile(r"<\s*html", re.I), "<html>"),
     (re.compile(r"<\s*body", re.I), "<body>"),
 )
@@ -157,17 +162,20 @@ def _reg(host):
 # Scanners
 # --------------------------------------------------------------------------- #
 def _scan_scripts(text):
-    hits = []
-    for rx, label in _SCRIPT_TAGS:
+    active, passive = [], []
+    for rx, label in _ACTIVE_TAGS:
         if rx.search(text):
-            hits.append(label)
+            active.append(label)
+    for rx, label in _PASSIVE_TAGS:
+        if rx.search(text):
+            passive.append(label)
     if _EVENT_RE.search(text):
-        hits.append("inline on* event handler")
+        active.append("inline on* event handler")
     if _JS_URI_RE.search(text):
-        hits.append("javascript:/data: URI")
+        active.append("javascript:/data: URI")
     if _ENCODED_MARKUP_RE.search(text):
-        hits.append("encoded <script> tag")
-    return sorted(set(hits))
+        active.append("encoded <script> tag")
+    return {"active": sorted(set(active)), "passive": sorted(set(passive))}
 
 
 def _scan_unicode(text):
@@ -254,8 +262,8 @@ def analyze_email_forensics(text):
 
     checks = []
     findings = []
-    flags = {"format": False, "script": False, "unicode": False,
-             "link": False, "header_mismatch": False}
+    flags = {"format": False, "script": False, "active_script": False,
+             "unicode": False, "link": False, "header_mismatch": False}
     score = 0.0
 
     # ---- format conformance -------------------------------------------- #
@@ -276,17 +284,29 @@ def analyze_email_forensics(text):
     })
 
     # ---- active content ------------------------------------------------- #
-    script_hits = _scan_scripts(text)
-    if script_hits:
+    scripts = _scan_scripts(text)
+    active_hits, passive_hits = scripts["active"], scripts["passive"]
+    all_hits = active_hits + passive_hits
+    if active_hits:
+        flags["script"] = flags["active_script"] = True
+        score += min(1.0, 0.6 + 0.15 * len(active_hits))
+        findings.append("Active HTML/script content: " + ", ".join(active_hits) + ".")
+    elif passive_hits:
         flags["script"] = True
-        score += min(1.0, 0.6 + 0.15 * len(script_hits))
-        findings.append("Active HTML/script content: " + ", ".join(script_hits) + ".")
+        score += min(0.4, 0.12 * len(passive_hits))
+        findings.append("Embedded HTML markup (no active script): "
+                        + ", ".join(passive_hits) + ".")
+    if all_hits:
+        detail = ("Active: " + ", ".join(active_hits) + ". ") if active_hits else ""
+        if passive_hits:
+            detail += "Embedded markup: " + ", ".join(passive_hits) + "."
+    else:
+        detail = "No tags, event handlers or script URIs."
     checks.append({
         "check": "No active HTML / script content",
-        "passed": not script_hits,
-        "detail": ("Found " + ", ".join(script_hits) + ".")
-                  if script_hits else "No tags, event handlers or script URIs.",
-        "severity": "high" if script_hits else "info",
+        "passed": not all_hits,
+        "detail": detail,
+        "severity": "high" if active_hits else ("medium" if passive_hits else "info"),
     })
 
     # ---- Unicode abuse -------------------------------------------------- #

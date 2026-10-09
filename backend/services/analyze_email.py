@@ -70,7 +70,7 @@ def analyze_email(text, filename="email-input.txt"):
 
     fscore = forensics["score"]
     base = base * 0.72 + fscore * 0.28
-    if forensics["flags"]["script"] or forensics["flags"]["unicode"]:
+    if forensics["flags"]["active_script"] or forensics["flags"]["unicode"]:
         base = max(base, 0.72)
     elif fscore >= 0.4:
         base = max(base, 0.55)
