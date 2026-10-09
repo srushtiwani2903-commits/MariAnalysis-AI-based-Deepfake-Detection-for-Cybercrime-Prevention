@@ -50,11 +50,48 @@ def _librosa_features(path):
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         mfcc_var = float(np.mean(np.var(mfcc, axis=1)))
         rmse = float(np.mean(librosa.feature.rms(y=y)[0]))
+
+        # ---- human-voice presence cues ---------------------------------- #
+        # Speech uses the 300-3400 Hz band and has intermittent (active)
+        # energy; silence is near-zero and music leans on low-frequency
+        # content. These cues let us gate "no human voice -> inconclusive".
+        rms_overall = float(np.sqrt(np.mean(y ** 2)))
+        frame_len = max(1, int(0.025 * sr))
+        hop = max(1, int(0.010 * sr))
+        if len(y) >= frame_len:
+            n_frames = 1 + (len(y) - frame_len) // hop
+            energies = np.array([
+                float(np.sqrt(np.mean(y[i * hop:i * hop + frame_len] ** 2)))
+                for i in range(n_frames)
+            ])
+        else:
+            energies = np.array([rms_overall])
+        mean_e = float(np.mean(energies)) if len(energies) else 0.0
+        active_ratio = (float(np.mean(energies > max(1e-4, 0.5 * mean_e)))
+                        if len(energies) else 0.0)
+
+        spectrum = np.abs(np.fft.rfft(y))
+        freqs = np.fft.rfftfreq(len(y), 1.0 / sr)
+        total_spec = float(np.sum(spectrum)) + 1e-12
+        speech_band = float(np.sum(spectrum[(freqs >= 300) & (freqs <= 3400)])) / total_spec
+        low_band = float(np.sum(spectrum[(freqs >= 0) & (freqs < 200)])) / total_spec
+
+        # A human voice is audible, intermittent and mostly in the speech band;
+        # near-silent or bass-dominated (music) content fails this gate.
+        voice_present = bool(
+            rms_overall > 0.01 and active_ratio > 0.15 and speech_band >= 0.35
+            and not (low_band > 0.6 and speech_band < 0.45)
+        )
+
         return {
             "spectral_flatness": round(spec_flat, 4),
             "zero_crossing_rate": round(zcr, 4),
             "mfcc_variance": round(mfcc_var, 2),
             "rms_energy": round(rmse, 4),
+            "speech_band_ratio": round(speech_band, 4),
+            "low_band_ratio": round(low_band, 4),
+            "active_ratio": round(active_ratio, 4),
+            "voice_present": voice_present,
             "duration_seconds": round(len(y) / sr, 2),
             "sample_rate": sr,
         }, True
@@ -125,10 +162,42 @@ def analyze_audio(file_path, filename, size_bytes):
 
     models, fake_probability = build_models("audio", base * 100, filename, spread=4.5)
     result, _risk = _interpret(fake_probability)
+
+    # --------------------- human-voice presence gate ----------------------- #
+    # With no human voice (silence / music) the verdict must be inconclusive
+    # ("No human voice detected"), never authentic or fake. When librosa could
+    # not decode the file we simply keep the already-inconclusive fallback.
+    voice_present = bool(features.get("voice_present", True)) if has_librosa else True
+    human_present = voice_present
+    strong_ai = (
+        base >= 0.65
+        or (features.get("spectral_flatness", 0) >= 0.35
+            and features.get("prosody_variance", 1) <= 0.35)
+    )
+    no_voice_gate = False
+    if has_librosa and not human_present and not strong_ai:
+        result = "inconclusive"
+        fake_probability = 50.0
+        no_voice_gate = True
+    elif has_librosa and not human_present and strong_ai:
+        result = "fake"
+        fake_probability = max(fake_probability, 62.0)
+    features["human_present"] = human_present
+
     risk = risk_label(fake_probability)
     ai_origin = classify_ai_origin("audio", features, fake_probability)
+    if no_voice_gate:
+        ai_origin = "authentic"
     susp = suspicious_scale(fake_probability, ai_origin, features, "audio")
     reasons = reasons_from_features("audio", features, fake_probability)
+    reasons.insert(0, {
+        "check": "Human voice presence",
+        "passed": human_present,
+        "detail": ("Human voice detected in the audio." if human_present else
+                   "No human voice detected (silence / music) - verdict forced to "
+                   "inconclusive." if no_voice_gate else
+                   "No human voice detected, but strong synthetic-voice signals were found."),
+    })
     trust = trust_score(fake_probability, {
         "spectral_detail": 1.0 - min(1.0, float(features.get("spectral_flatness", 0) / 0.4)),
         "prosody": float(features.get("prosody_variance", 0.5)),
@@ -146,6 +215,13 @@ def analyze_audio(file_path, filename, size_bytes):
                         "(spectral seams / splicing), raising the suspicion scale.")
     elif ai_origin == "ai_generated":
         explanation += " The voice shows hallmarks of being generated entirely by AI."
+    if no_voice_gate:
+        explanation += (" No human voice was detected (the clip appears to be silence or "
+                        "music), so voice-clone forensic analysis was not possible - the "
+                        "verdict is inconclusive.")
+    elif not human_present and result == "fake":
+        explanation += (" No human voice was detected, but strong synthetic-voice signals "
+                        "agree, so the audio is reported as fake.")
     recommendations = _recommendations(result, cloning_probability)
 
     elapsed = int((time.time() - start) * 1000)
@@ -160,6 +236,7 @@ def analyze_audio(file_path, filename, size_bytes):
         "ai_manipulated": ai_origin == "ai_manipulated",
         "fake_probability": round(fake_probability, 1),
         "cloning_probability": round(cloning_probability, 1),
+        "human_present": human_present,
         "emotion_mismatch": bool(emotion_mismatch),
         "voice_verdict": "AI VOICE" if fake_probability >= 62 else
                          ("UNCERTAIN" if fake_probability >= 42 else "HUMAN VOICE"),

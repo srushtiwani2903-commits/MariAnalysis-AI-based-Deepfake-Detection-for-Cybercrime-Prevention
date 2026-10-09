@@ -418,10 +418,44 @@ def analyze_video(file_path, filename, size_bytes):
     models, fake_probability = build_models("video", base * 100, filename, spread=4.5,
                                             real_scores=real_scores)
     result, _risk = _interpret(fake_probability)
+
+    # --------------------- human-presence gate ----------------------------- #
+    # No human/face across the sampled frames -> inconclusive ("No face
+    # detected"), never authentic. Strong AI signals still win.
+    human_present = with_face > 0
+    strong_ai = (
+        (cnn_fake_pct is not None and cnn_fake_pct >= 65.0)
+        or base >= 0.70
+        or (kaggle_info and kaggle_info.get("status") == "ready"
+            and kaggle_info.get("fake_likelihood", 0.0) >= 0.75)
+    )
+    no_face_gate = False
+    if not human_present and not strong_ai:
+        result = "inconclusive"
+        fake_probability = 50.0
+        no_face_gate = True
+    elif not human_present and strong_ai:
+        result = "fake"
+        fake_probability = max(fake_probability, 62.0)
+    elif strong_ai and result == "authentic":
+        result = "inconclusive"
+        fake_probability = max(fake_probability, 42.0)
+    features["human_present"] = human_present
+
     risk = risk_label(fake_probability)
     ai_origin = classify_ai_origin("video", features, fake_probability)
+    if no_face_gate:
+        ai_origin = "authentic"
     susp = suspicious_scale(fake_probability, ai_origin, features, "video")
     reasons = reasons_from_features("video", features, fake_probability)
+    reasons.insert(0, {
+        "check": "Human / face presence",
+        "passed": human_present,
+        "detail": (f"Face detected in {with_face} sampled frame(s)." if human_present else
+                   "No face detected in any sampled frame - verdict forced to inconclusive."
+                   if no_face_gate else
+                   "No face detected, but strong AI-generation signals were found."),
+    })
     if cnn_fake_pct is not None:
         reasons.insert(0, {
             "check": "Trained frame-CNN (EfficientNet) forensic signal",
@@ -442,6 +476,12 @@ def analyze_video(file_path, filename, size_bytes):
                         "(temporal flicker / face inconsistencies), raising the suspicion scale.")
     elif ai_origin == "ai_generated":
         explanation += " The footage shows hallmarks of being generated entirely by AI."
+    if no_face_gate:
+        explanation += (" No human face was detected in any sampled frame, so facial forensic "
+                        "analysis was not possible - the verdict is inconclusive.")
+    elif not human_present and result == "fake":
+        explanation += (" No face was detected, but several independent AI-generation signals "
+                        "agree, so the video is reported as fake.")
     recommendations = _recommendations(result)
 
     # Per-frame timeline with a verdict for each sampled second.
@@ -500,6 +540,7 @@ def analyze_video(file_path, filename, size_bytes):
         "models": models,
         "reasons": reasons,
         "file_hash": file_hash,
+        "human_present": human_present,
         "suspicious_sections": timeline,
         "model": "video-frame-cnn-v1" if cnn_fake_pct is not None else "temporal-heuristic-v1",
         "kaggle_reference": kaggle_info,

@@ -285,6 +285,22 @@ _REASON_SPECS = {
 
 
 def explain_short(media_type, result, prob):
+    if result == "inconclusive":
+        head = {
+            "image": ("The image could not be verified against a human subject, so the "
+                      "verdict is inconclusive. "),
+            "video": ("No verifiable human subject was found in the sampled frames, so the "
+                      "verdict is inconclusive. "),
+            "audio": ("No human voice was detected in the audio, so the verdict is "
+                      "inconclusive. "),
+            "text": ("There is not enough human-written text to reach a confident verdict, "
+                     "so the result is inconclusive. "),
+            "email": ("The email does not contain enough verifiable content for a confident "
+                      "verdict. "),
+            "post": ("The post does not contain a verifiable human subject or enough content "
+                     "for a confident verdict. "),
+        }.get(media_type, "The verdict is inconclusive. ")
+        return head + f"Overall AI probability is {prob:.1f}%."
     head = {
         "image": ("The model classifies this image as AI-generated or manipulated. "
                   if result == "fake" else

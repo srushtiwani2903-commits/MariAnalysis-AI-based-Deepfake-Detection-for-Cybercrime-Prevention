@@ -219,8 +219,26 @@ def analyze_text(text, filename="text-input.txt"):
         (local, "Local RoBERTa (openai-detector)"),
     ])
     result, risk0 = _interpret(fake_probability)
+
+    # ------------- human-written-text presence gate ------------------------ #
+    # Too little text to attribute to a human author -> inconclusive, never a
+    # confident authentic/fake verdict.
+    human_present = num_tokens >= 10
+    length_gate = not human_present
+    if length_gate:
+        result = "inconclusive"
+        fake_probability = 50.0
+    features["human_present"] = human_present
+
     risk = risk_label(fake_probability)
     reasons = reasons_from_features("text", features, fake_probability)
+    if length_gate:
+        reasons.insert(0, {
+            "check": "Human-written text amount",
+            "passed": False,
+            "detail": (f"Only {num_tokens} word(s) supplied - not enough human-written "
+                       "text for a confident verdict."),
+        })
     trust = trust_score(fake_probability, {
         "perplexity": 1.0 - ppl_susp, "burstiness": 1.0 - burst_susp,
         "repetition": 1.0 - rep_susp,
@@ -232,6 +250,9 @@ def analyze_text(text, filename="text-input.txt"):
         f" Perplexity {ppl_raw:.1f}, sentence-length burstiness {burst_raw:.2f}, "
         f"average sentence length {avg_len:.1f} words."
     )
+    if length_gate:
+        explanation += (" The submitted text is too short to confidently attribute to a "
+                        "human author, so the verdict is inconclusive.")
     recommendations = _recommendations(result)
     elapsed = int((time.time() - start) * 1000)
 
@@ -256,6 +277,7 @@ def analyze_text(text, filename="text-input.txt"):
         "models": models,
         "reasons": reasons,
         "suspicious_sections": sections,
+        "human_present": human_present,
         "ai_providers": {"gemini": gemini, "local": local},
         "model": "heuristic-nlp-v1",
     }

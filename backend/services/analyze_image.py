@@ -817,13 +817,51 @@ def analyze_image(file_path, filename, size_bytes):
         fake_probability = max(fake_probability, 45.0)
 
     result, _risk = _interpret(fake_probability)
+
+    # --------------------- human-presence gate ----------------------------- #
+    # Requirement: with no human/face in the image we must report inconclusive
+    # ("No face detected") rather than authentic or fake. Strong, agreed-upon
+    # AI-generation signals still win (an AI image without a face is fake), but
+    # a weak/ambiguous no-face scan is never allowed to read "authentic".
+    human_present = face["faces_detected"] > 0
+    strong_ai = (
+        bool(meta.get("has_ai_generator_tag"))
+        or ai_signals >= 4
+        or (cnn_fake_pct is not None and cnn_fake_pct >= 65.0)
+        or (spectral_score >= 0.55 and noise_score >= 0.45 and texture_score >= 0.75)
+    )
+    no_face_gate = False
+    if not human_present and not strong_ai:
+        result = "inconclusive"
+        fake_probability = 50.0
+        no_face_gate = True
+    elif not human_present and strong_ai:
+        result = "fake"
+        fake_probability = max(fake_probability, 60.0)
+    elif strong_ai and result == "authentic":
+        # Strong AI signals are never reported as an authentic capture.
+        result = "inconclusive"
+        fake_probability = max(fake_probability, 42.0)
+    features["human_present"] = human_present
+
     risk = risk_label(fake_probability)
     ai_origin = classify_ai_origin("image", features, fake_probability)
-    if filter_score >= 0.35 and ai_origin == "authentic":
+    if no_face_gate:
+        # No human subject to attribute an AI face/artifact to; hide the origin.
+        ai_origin = "authentic"
+    elif filter_score >= 0.35 and ai_origin == "authentic":
         # a cosmetically filtered face is a modified capture, not a raw one
         ai_origin = "ai_manipulated"
     susp = suspicious_scale(fake_probability, ai_origin, features, "image")
     reasons = reasons_from_features("image", features, fake_probability)
+    reasons.insert(0, {
+        "check": "Human / face presence",
+        "passed": human_present,
+        "detail": ("Face detected in the image." if human_present else
+                   "No face detected - verdict forced to inconclusive."
+                   if no_face_gate else
+                   "No face detected, but strong AI-generation signals were found."),
+    })
     if cnn_fake_pct is not None:
         reasons.insert(0, {
             "check": "Trained CNN (EfficientNet) forensic signal",
@@ -844,6 +882,13 @@ def analyze_image(file_path, filename, size_bytes):
                         "(localised artifacts detected), which raises the suspicion scale.")
     elif ai_origin == "ai_generated":
         explanation += " The content shows hallmarks of being generated entirely by AI."
+    if no_face_gate:
+        explanation += (" No face or human subject was detected, so no facial/biometric "
+                        "forensic check could be performed - the verdict is inconclusive "
+                        "rather than authentic.")
+    elif not human_present and result == "fake":
+        explanation += (" No face was detected, but several independent AI-generation "
+                        "signals agree, so the image is reported as fake.")
     if filter_score >= 0.35:
         explanation += (
             " A beauty filter, AR effect or cosmetic overlay was detected on the face "
@@ -878,6 +923,7 @@ def analyze_image(file_path, filename, size_bytes):
         "models": models,
         "reasons": reasons,
         "file_hash": file_hash,
+        "human_present": human_present,
         "face_analysis": face,
         "heatmap_file": heatmap_name,
         "model": "efficientnet-cnn-v1" if cnn_fake_pct is not None else "heuristic-vision-v1",

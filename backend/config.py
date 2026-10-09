@@ -175,6 +175,22 @@ class Config:
     # the 140k face dataset has 70k real + 70k fake across train/test/valid).
     IMAGE_REFERENCE_MAX_PER_CLASS = int(os.environ.get("IMAGE_REFERENCE_MAX_PER_CLASS", 70000))
 
+    # --- Multi-source image data pipeline (extra reference sources) ---
+    # Optional additional labelled image sources merged into the image
+    # reference profile so scans are compared against a broader real-vs-fake
+    # corpus. Kaggle is already covered by the registry; these add Hugging Face
+    # and Google Drive sources (e.g. AI-generated face archives). Nothing is
+    # fetched until a source is actually configured below.
+    IMAGE_PIPELINE_IMAGES_PER_CLASS = int(os.environ.get("IMAGE_PIPELINE_IMAGES_PER_CLASS", 1000))
+    IMAGE_HF_IMAGES_PER_CLASS = int(os.environ.get("IMAGE_HF_IMAGES_PER_CLASS", 300))
+    # Google Drive shareable file IDs for zipped real / fake (or AI-generated)
+    # image archives. A fake-only archive is copied entirely to the fake class.
+    IMAGE_GOOGLE_REAL_DRIVE_ID = os.environ.get("IMAGE_GOOGLE_REAL_DRIVE_ID", "")
+    IMAGE_GOOGLE_FAKE_DRIVE_ID = os.environ.get("IMAGE_GOOGLE_FAKE_DRIVE_ID", "")
+    # Optional comma-separated Hugging Face image dataset repos (real/fake
+    # folders or AI-generated labels).
+    IMAGE_HF_DATASETS = os.environ.get("IMAGE_HF_DATASETS", "")
+
     # --- Real AI model providers (Hybrid engine) ---
     # Gemini (Google AI Studio free key, https://aistudio.google.com/app/apikey):
     # one multimodal API that scans images, sampled video frames, audio and text.
