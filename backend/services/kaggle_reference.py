@@ -548,8 +548,9 @@ def _local_dataset_root(media_type=_DEFAULT_MEDIA):
                       if "real-vs-fake" not in c]
     else:
         # Prefer a bulk dataset laid out on an external/extra drive as
-        # <drive>:\MariAnalysis_Datasets\image\{real,fake} when connected.
-        candidates += _drive_dataset_roots(media_type)
+        # <drive>:\MariAnalysis_Datasets\image\{real,fake} when connected, so it
+        # wins over the small bundled/video sample datasets.
+        candidates = _drive_dataset_roots(media_type) + candidates
 
     for root in candidates:
         if root and os.path.isdir(root) and _real_fake_folders_exist(root, media_type):

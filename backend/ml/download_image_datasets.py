@@ -182,8 +182,9 @@ def _kaggle_authenticate():
 
 def _download_kaggle_folder(api, entry, dest_root, prefix):
     slug = entry["slug"]
+    # Keep any previously downloaded zip so an interrupted run resumes without
+    # re-downloading (the Kaggle client skips existing archives when force=False).
     staging = os.path.join(dest_root, "_staging", prefix)
-    shutil.rmtree(staging, ignore_errors=True)
     os.makedirs(staging, exist_ok=True)
     try:
         logger.info("[kaggle] downloading %s ...", slug)
@@ -209,7 +210,6 @@ def _download_kaggle_folder(api, entry, dest_root, prefix):
 def _download_kaggle_csv(api, entry, dest_root, prefix):
     slug = entry["slug"]
     staging = os.path.join(dest_root, "_staging", prefix)
-    shutil.rmtree(staging, ignore_errors=True)
     os.makedirs(staging, exist_ok=True)
     try:
         logger.info("[kaggle] downloading %s (csv-labelled) ...", slug)
