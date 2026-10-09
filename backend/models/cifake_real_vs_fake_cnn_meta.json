@@ -1,0 +1,8 @@
+{
+  "test_accuracy": 0.9612,
+  "best_test_accuracy": 0.26459358248710635,
+  "backbone": "efficientnet_b0",
+  "image_size": 224,
+  "train_samples": 10000,
+  "test_samples": 10000
+}

@@ -224,12 +224,12 @@ def main():
     for ep in range(1, args.epochs + 1):
         t = time.time()
         trl, tra = run_epoch(model, tr, opt, crit, scaler, device, True, amp)
-        val, vtl = run_epoch(model, te, opt, crit, scaler, device, False, amp)
+        val_loss, val_acc = run_epoch(model, te, opt, crit, scaler, device, False, amp)
         sched.step()
         print(f"epoch {ep}/{args.epochs} | train {trl:.4f}/{tra:.3f} | "
-              f"test {vtl:.4f}/{val:.3f} | {time.time()-t:.0f}s", flush=True)
-        if val >= best:
-            best = val
+              f"test {val_loss:.4f}/{val_acc:.3f} | {time.time()-t:.0f}s", flush=True)
+        if val_acc >= best:
+            best = val_acc
             torch.save({
                 "model": model.state_dict(),
                 "backbone": args.backbone,
