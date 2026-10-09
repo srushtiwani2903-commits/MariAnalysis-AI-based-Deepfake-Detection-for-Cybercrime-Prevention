@@ -715,15 +715,15 @@ def analyze_image(file_path, filename, size_bytes):
     features["platform_recompression"] = 1.0 if global_recompress else 0.0
 
     base = (
-        0.16 * ela_score           # ELA - catches manipulation (high ELA)
-        + 0.18 * texture_score     # Smooth textures = synthetic (most reliable)
-        + 0.13 * effective_recomp  # Too-clean recompression (dampened on platform recompresses)
-        + 0.10 * meta_score        # Missing EXIF / AI tags
-        + 0.06 * flatness          # Color flatness
+        0.14 * ela_score           # ELA - catches manipulation (high ELA)
+        + 0.17 * texture_score     # Smooth textures = synthetic (most reliable)
+        + 0.11 * effective_recomp  # Too-clean recompression (dampened on platform recompresses)
+        + 0.08 * meta_score        # Missing EXIF / AI tags
+        + 0.05 * flatness          # Color flatness
         + 0.05 * face_score        # Face heuristics
-        + 0.17 * spectral_effective  # frequency domain artifacts
-        + 0.11 * noise_effective     # unnatural noise patterns
-        + 0.10 * filt["filter_effect"]  # beauty filter / AR effect on the face
+        + 0.21 * spectral_effective  # frequency domain artifacts (strongest AI cue)
+        + 0.15 * noise_effective     # unnatural noise patterns (strong AI cue)
+        + 0.09 * filt["filter_effect"]  # beauty filter / AR effect on the face
     )
     base = max(0.0, min(1.0, base + (lighting_score * 0.03 if face_weight else 0.0)))
 
@@ -731,27 +731,37 @@ def analyze_image(file_path, filename, size_bytes):
     # Only trigger when STRONG signals agree. A compressed real photo will
     # have low ELA but will NOT trigger spectral/noise/texture simultaneously,
     # so it won't get the boost.
+    # NOTE: thresholds match what the detectors can actually emit. The noise
+    # detector reports 0.4 for its strongest "equal noise across channels"
+    # synthetic signature, so a 0.5 cut-off made this vote impossible to earn -
+    # genuine AI images therefore never reached the boost tier and were scored
+    # as authentic. Thresholds are now aligned with the detector output ranges.
     ai_signals = 0
-    if spectral_score >= 0.5 and not is_real_camera:
+    if spectral_score >= 0.45 and not is_real_camera:
         ai_signals += 1
-    if noise_score >= 0.5 and not is_real_camera:
+    if noise_score >= 0.35 and not is_real_camera:
         ai_signals += 1
-    if texture_score >= 0.75:
+    if texture_score >= 0.70:
         ai_signals += 1
     if effective_recomp >= 0.80:
         ai_signals += 1
-    if ela_score <= 0.08 and not global_recompress:
+    if ela_score <= 0.10 and not global_recompress:
         ai_signals += 1
     if meta.get("has_ai_generator_tag"):
         ai_signals += 2  # Strong signal
     if filt["filter_effect"] >= 0.6:
         ai_signals += 1  # cosmetic/AR filter applied to the face
+    features["ai_signal_count"] = ai_signals
 
-    # Boost only when 4+ signals agree (genuine AI output)
+    # Boost when 3+ strong, independent signals agree (genuine AI output).
+    # Real camera captures are excluded from the spectral/noise votes above and
+    # platform re-compresses lose the recomp/ELA votes, so they rarely reach 3.
     if ai_signals >= 5:
-        base = min(1.0, base + 0.18)  # Very strong boost
+        base = min(1.0, base + 0.25)  # Very strong boost
     elif ai_signals >= 4:
-        base = min(1.0, base + 0.10)  # Strong boost
+        base = min(1.0, base + 0.16)  # Strong boost
+    elif ai_signals >= 3:
+        base = min(1.0, base + 0.08)  # Moderate boost
 
     # ----------------------- Kaggle reference blend ------------------------ #
     # Blend with the Kaggle reference profile when it agrees with the
