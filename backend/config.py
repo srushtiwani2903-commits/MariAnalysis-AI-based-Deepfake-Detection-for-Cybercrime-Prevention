@@ -171,9 +171,10 @@ class Config:
     # path is set (or auto-detected). Only image scans use it; it replaces the
     # Kaggle sample fetch. Set empty to fall back to the Kaggle behaviour.
     IMAGE_REFERENCE_DATASET_PATH = os.environ.get("IMAGE_REFERENCE_DATASET_PATH", "")
-    # How many images per class to use from the local dataset (all by default:
-    # the 140k face dataset has 70k real + 70k fake across train/test/valid).
-    IMAGE_REFERENCE_MAX_PER_CLASS = int(os.environ.get("IMAGE_REFERENCE_MAX_PER_CLASS", 70000))
+    # How many images per class to profile from the local dataset. Capped by
+    # default so a bulk corpus (tens of thousands of images) doesn't stall the
+    # startup reference build; the trained CNN is the primary signal anyway.
+    IMAGE_REFERENCE_MAX_PER_CLASS = int(os.environ.get("IMAGE_REFERENCE_MAX_PER_CLASS", 3000))
 
     # --- Multi-source image data pipeline (extra reference sources) ---
     # Optional additional labelled image sources merged into the image

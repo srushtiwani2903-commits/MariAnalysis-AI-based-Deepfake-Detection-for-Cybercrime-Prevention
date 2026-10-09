@@ -501,6 +501,25 @@ def _label_dir(folder, media_type=_DEFAULT_MEDIA):
     return None
 
 
+def _drive_dataset_roots(media_type=_DEFAULT_MEDIA):
+    """Probe every drive for ``<drive>:\\MariAnalysis_Datasets\\<media>`` roots.
+
+    Lets a bulk corpus living on a pendrive / external disk be picked up
+    automatically when it is plugged in, without hard-coding a drive letter.
+    """
+    import string
+
+    roots = []
+    for letter in string.ascii_uppercase:
+        base = os.path.join(f"{letter}:\\", "MariAnalysis_Datasets", media_type)
+        try:
+            if os.path.isdir(base):
+                roots.append(base)
+        except OSError:
+            continue
+    return roots
+
+
 def _local_dataset_root(media_type=_DEFAULT_MEDIA):
     """Return a local dataset folder with real/+fake/ inside, or None.
 
@@ -527,6 +546,10 @@ def _local_dataset_root(media_type=_DEFAULT_MEDIA):
         # The face-dataset candidate paths above only ever hold images.
         candidates = [c for c in candidates
                       if "real-vs-fake" not in c]
+    else:
+        # Prefer a bulk dataset laid out on an external/extra drive as
+        # <drive>:\MariAnalysis_Datasets\image\{real,fake} when connected.
+        candidates += _drive_dataset_roots(media_type)
 
     for root in candidates:
         if root and os.path.isdir(root) and _real_fake_folders_exist(root, media_type):

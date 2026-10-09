@@ -55,6 +55,8 @@ EARLY_STOP_PATIENCE = int(os.getenv("EARLY_STOP_PATIENCE", "6"))
 USE_AMP = os.getenv("USE_AMP", "true").lower() == "true"
 LABEL_SMOOTHING = float(os.getenv("LABEL_SMOOTHING", "0.05"))
 NUM_WORKERS = int(os.getenv("NUM_WORKERS", "4"))
+# Cap images per class (0 = use all). Useful for bounded local GPU runs.
+MAX_PER_CLASS = int(os.getenv("MAX_PER_CLASS", "0"))
 # Continue training from the checkpoint at MODEL_OUTPUT (skips already-done epochs).
 RESUME = os.getenv("RESUME", "false").lower() == "true"
 # CPU-friendly: freeze all backbone weights and train only the new head.
@@ -145,9 +147,13 @@ def find_class_root(root):
     return best
 
 
-def _images_in(folder):
-    return sorted(os.path.join(folder, f) for f in os.listdir(folder)
-                  if os.path.splitext(f)[1].lower() in IMAGE_EXTS)
+def _images_in(folder, limit=None):
+    files = sorted(os.path.join(folder, f) for f in os.listdir(folder)
+                   if os.path.splitext(f)[1].lower() in IMAGE_EXTS)
+    if limit and len(files) > limit:
+        random.Random(SEED).shuffle(files)
+        files = files[:limit]
+    return files
 
 
 class ClassPairDataset(torch.utils.data.Dataset):
@@ -169,7 +175,9 @@ class ClassPairDataset(torch.utils.data.Dataset):
 
 
 def build_classpair(real_dir, fake_dir, transform):
-    return ClassPairDataset(_images_in(real_dir), _images_in(fake_dir), transform)
+    limit = MAX_PER_CLASS or None
+    return ClassPairDataset(_images_in(real_dir, limit), _images_in(fake_dir, limit),
+                            transform)
 
 
 def remap_imagefolder(ds, real_name, fake_name):
