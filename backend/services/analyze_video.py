@@ -287,6 +287,26 @@ def feature_vector(file_path, max_frames=None):
 def _aggregate_features(frames, info, drift):
     """Turn sampled frames into the shared numeric feature dict."""
     n = len(frames)
+    if n == 0:
+        # No decodable frames (corrupt/unsupported video): return a neutral,
+        # fully-populated feature set so callers get a clean inconclusive
+        # result instead of a divide-by-zero / missing-key crash.
+        dur = info.get("duration_seconds", 0)
+        size_bytes = info.get("size_bytes", 0)
+        compression = 1.0 - min(1.0, (size_bytes / 1_000_000) / max(1.0, dur * 4))
+        return {
+            "face_presence": 0.0,
+            "synthetic_smoothness": 0.0,
+            "temporal_flicker": 0.0,
+            "byte_hash_drift": round(max(0.0, min(1.0, drift)), 4),
+            "compression_ratio": round(max(0.0, min(1.0, compression)), 4),
+            "texture_uniformity": 0.5,
+            "error_level_analysis": 0.5,
+            "frame_count": 0,
+            "_frame_textures": [],
+            "_frame_ela": [],
+            "_face_count": 0,
+        }
     with_face = sum(1 for f in frames if f["has_face"])
     face_presence = with_face / n
     consistency = sum(f.get("face_consistency", 0.5) for f in frames) / n
