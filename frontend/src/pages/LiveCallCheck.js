@@ -13,6 +13,26 @@ import api from "../api/api";
 const MAX_OUT_W = 960;
 const TICK_MS = 1600;
 const MAX_FAILS = 3;
+const FILTER_THRESHOLD = 0.35;
+
+// Verdict is driven by the backend's own label (authentic / inconclusive /
+// fake) so the UI can never disagree with the forensic engine. A cosmetic or
+// AR face filter is a *modified* capture, so it is reported as filtered /
+// inconclusive - never as a deepfake.
+function verdictFor(res) {
+  if (!res) return null;
+  const filtered = res.filtered ?? (res.features?.filter_effect ?? res.filter_effect ?? 0) >= FILTER_THRESHOLD;
+  if (res.result === "fake") return "FAKE SUSPECTED";
+  if (res.result === "inconclusive") return filtered ? "FILTERED — INCONCLUSIVE" : "AMBIGUOUS";
+  return "LIKELY REAL";
+}
+
+function verdictClasses(verdict) {
+  if (verdict === "FAKE SUSPECTED") return "bg-rose-500 text-white";
+  if (verdict === "AMBIGUOUS") return "bg-amber-500 text-black";
+  if (verdict === "FILTERED — INCONCLUSIVE") return "bg-violet-500 text-white";
+  return "bg-emerald-500 text-white";
+}
 
 export default function LiveCallCheck() {
   const videoRef = useRef(null);
@@ -23,10 +43,17 @@ export default function LiveCallCheck() {
   const draftRef = useRef(null);
   const regionRef = useRef(null);
   const failsRef = useRef(0);
+  const smoothRef = useRef(0);
+  const stableVerdictRef = useRef(null);
+  const pendingVerdictRef = useRef(null);
+  const pendingCountRef = useRef(0);
+  const rawFakeRef = useRef(0);
 
   const [active, setActive] = useState(false);
   const [ended, setEnded] = useState(false);
   const [result, setResult] = useState(null);
+  const [smoothFake, setSmoothFake] = useState(0);
+  const [stableVerdict, setStableVerdict] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hint, setHint] = useState(
@@ -40,6 +67,17 @@ export default function LiveCallCheck() {
   const setRegionSafe = (r) => { regionRef.current = r; setRegion(r); };
   const setDraftSafe = (d) => { draftRef.current = d; setDraft(d); };
 
+  const resetSignal = () => {
+    smoothRef.current = 0;
+    rawFakeRef.current = 0;
+    stableVerdictRef.current = null;
+    pendingVerdictRef.current = null;
+    pendingCountRef.current = 0;
+    setSmoothFake(0);
+    setStableVerdict(null);
+    setResult(null);
+  };
+
   const teardown = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -51,6 +89,7 @@ export default function LiveCallCheck() {
     setEnded(false);
     setPaused(false);
     failsRef.current = 0;
+    resetSignal();
     setRegionSafe(null);
     setDraftSafe(null);
   };
@@ -61,6 +100,7 @@ export default function LiveCallCheck() {
     setEnded(true);
     setPaused(false);
     failsRef.current = 0;
+    resetSignal();
     setRegionSafe(null);
     setDraftSafe(null);
     setHint("Sharing stopped. Press Start to share the call window again.");
@@ -88,6 +128,7 @@ export default function LiveCallCheck() {
       setPaused(false);
       setHiddenPause(false);
       failsRef.current = 0;
+      resetSignal();
       setRegionSafe(null);
       setDraftSafe(null);
       setActive(true);
@@ -198,9 +239,27 @@ export default function LiveCallCheck() {
           headers: { "Content-Type": "multipart/form-data" },
         });
         if (!alive) return;
-        setResult(data.result || data);
+        const res = data.result || data;
+        setResult(res);
         setErr("");
         failsRef.current = 0;
+        // Smooth the meter so the needle/marker glide instead of jumping.
+        const target = Math.max(0, Math.min(100, res?.fake_probability ?? 0));
+        rawFakeRef.current = target;
+        smoothRef.current = smoothRef.current + (target - smoothRef.current) * 0.5;
+        setSmoothFake(smoothRef.current);
+        // Stabilise the verdict: require the same label on two frames in a row.
+        const rawV = verdictFor(res);
+        if (rawV === pendingVerdictRef.current) {
+          pendingCountRef.current += 1;
+        } else {
+          pendingVerdictRef.current = rawV;
+          pendingCountRef.current = 1;
+        }
+        if (stableVerdictRef.current === null || pendingCountRef.current >= 2) {
+          stableVerdictRef.current = rawV;
+          setStableVerdict(rawV);
+        }
       } catch (e) {
         if (!alive) return;
         const status = e?.response?.status;
@@ -247,8 +306,11 @@ export default function LiveCallCheck() {
 
   useEffect(() => () => teardown(), []);
 
-  const fake = result?.fake_probability;
-  const verdict = fake >= 65 ? "FAKE SUSPECTED" : fake >= 42 ? "AMBIGUOUS" : "LIKELY REAL";
+  const fake = result?.fake_probability ?? 0;
+  const displayFake = result ? smoothFake : 0;
+  const filterScore = result?.filter_effect ?? result?.features?.filter_effect ?? 0;
+  const filtered = result ? (result.filtered ?? filterScore >= FILTER_THRESHOLD) : false;
+  const verdict = result ? (stableVerdict || verdictFor(result)) : null;
   const overlayRect = draft || region;
 
   return (
@@ -292,13 +354,11 @@ export default function LiveCallCheck() {
               )}
               {active && result && (
                 <div className="absolute inset-x-0 top-0 p-3 flex justify-between items-start pointer-events-none">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wider text-white ${
-                    verdict === "FAKE SUSPECTED" ? "bg-rose-500" : verdict === "AMBIGUOUS" ? "bg-amber-500" : "bg-emerald-500"
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wider ${verdictClasses(verdict)}`}>
                     {verdict}
                   </span>
                   <span className="px-3 py-1 rounded-full text-xs font-mono bg-black/50 text-white">
-                    {(result?.fake_probability ?? 0).toFixed(0)}% fake
+                    {fake.toFixed(0)}% fake
                   </span>
                 </div>
               )}
@@ -310,6 +370,17 @@ export default function LiveCallCheck() {
                     Stop the call, hang up, and verify the person through a known trusted channel
                     before sharing any sensitive information.
                   </p>
+                </div>
+              )}
+              {active && result && verdict === "FILTERED — INCONCLUSIVE" && (
+                <div className="absolute inset-x-0 bottom-0 p-3">
+                  <div className="flex items-center gap-2 rounded-xl bg-violet-950/80 backdrop-blur-sm text-violet-100 text-xs px-3 py-2">
+                    <SparklesIcon className="w-4 h-4 shrink-0 text-violet-300" />
+                    <span>
+                      Face filter / AR effect detected — this is a modified feed, not proof of a deepfake.
+                      Ask the person to turn off filters for a clear result.
+                    </span>
+                  </div>
                 </div>
               )}
               {!active && (
@@ -364,24 +435,24 @@ export default function LiveCallCheck() {
 
         <div className="glass-strong rounded-3xl p-6 flex flex-col items-center gap-6">
           <h2 className="text-lg font-bold self-start">Live Signal</h2>
-          <ConfidenceGauge value={result?.fake_probability ?? 0}
+          <ConfidenceGauge value={displayFake}
             label={result ? "Manipulation likelihood" : "Awaiting first frame"} />
           <div className={`w-full rounded-2xl px-4 py-3 text-center text-sm font-bold tracking-wider ${
-            !result ? "bg-slate-500/10 text-slate-400" :
-            verdict === "FAKE SUSPECTED" ? "bg-rose-500 text-white" :
-            verdict === "AMBIGUOUS" ? "bg-amber-500 text-black" : "bg-emerald-500 text-white"
+            !result ? "bg-slate-500/10 text-slate-400" : verdictClasses(verdict)
           }`}>
             {result ? verdict.replace("SUSPECTED", "SUSPECTED ⚠") : "START SCREEN SHARE"}
           </div>
           <div className="w-full">
             <div className="flex justify-between text-[11px] mb-1">
               <span className="font-bold text-emerald-500">REAL</span>
-              <span className="font-mono text-slate-400">{Math.round(fake ?? 0)}% fake</span>
+              <span className="font-mono text-slate-400">{Math.round(displayFake)}% fake</span>
               <span className="font-bold text-rose-500">FAKE</span>
             </div>
             <div className="h-3 w-full rounded-full overflow-hidden bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 relative">
-              <div className="absolute inset-y-0 bg-white/70 border-r-2 border-black"
-                style={{ left: `calc(${(fake ?? 0)}% - 1px)`, width: "2px" }} />
+              <div className="absolute inset-y-0 rounded-full bg-black/30"
+                style={{ left: "60%", width: "2px" }} title="Deepfake threshold (60%)" />
+              <div className="absolute inset-y-0 w-1 -ml-0.5 rounded-full bg-white ring-1 ring-black/40 shadow transition-all duration-700 ease-out"
+                style={{ left: `${Math.max(0, Math.min(100, displayFake))}%` }} />
             </div>
           </div>
           <div className="w-full space-y-2 text-xs">
@@ -390,11 +461,9 @@ export default function LiveCallCheck() {
             <div className="flex justify-between"><span className="text-slate-500">Feed liveness</span>
               <span className={`font-mono font-bold ${result?.liveness?.replay_suspected ? "text-amber-500" : "text-emerald-500"}`}>
                 {result ? (result?.liveness?.replay_suspected ? "FROZEN" : "LIVE") : "—"}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Filter / effect</span>
-              <span className={`font-mono font-bold ${(result?.features?.filter_effect ?? 0) >= 0.35 ? "text-amber-500" : "text-emerald-500"}`}>
-                {result ? ((result?.features?.filter_effect ?? 0) >= 0.35
-                  ? `DETECTED ${Math.round((result?.features?.filter_effect ?? 0) * 100)}%`
-                  : "none") : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Filter / AR effect</span>
+              <span className={`font-mono font-bold ${filtered ? "text-violet-400" : "text-emerald-500"}`}>
+                {result ? (filtered ? `DETECTED ${Math.round(filterScore * 100)}%` : "none") : "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Signal confidence</span>
               <span className="font-mono">{result?.confidence ?? "—"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Capture source</span>

@@ -810,15 +810,24 @@ def analyze_image(file_path, filename, size_bytes):
                                             real_scores=real_scores)
 
     # --------------------- beauty-filter / AR floor ------------------------ #
-    # A filtered or effect-covered face is never a raw authentic capture, so
-    # the verdict can never come back "authentic" when the filter detector is
-    # confident: moderate evidence floors the score at inconclusive, strong
-    # combined evidence (skin smoothing + hue shift / selective blur) at fake.
+    # A cosmetic filter or AR effect (skin smoothing, hue shift, face-shape
+    # warp) makes the face a *modified* capture, but it is NOT a deepfake.
+    # So a filtered frame is reported INCONCLUSIVE - never "fake" - unless a
+    # separate, filter-independent deepfake signal is also present.
     filter_score = filt["filter_effect"]
-    if filter_score >= 0.65:
-        fake_probability = max(fake_probability, 62.0)
-    elif filter_score >= 0.35:
-        fake_probability = max(fake_probability, 45.0)
+    strong_ai = (
+        (cnn_fake_pct is not None and cnn_fake_pct >= 70.0)
+        or meta.get("has_ai_generator_tag")
+        or (texture_score >= 0.80 and (spectral_score >= 0.45 or noise_score >= 0.45))
+    )
+    filtered = filter_score >= 0.35
+    if filtered:
+        if strong_ai:
+            # genuine synthetic/manipulation evidence alongside the filter
+            fake_probability = max(fake_probability, 62.0)
+        else:
+            # clamp into the inconclusive band, below the fake threshold
+            fake_probability = min(max(fake_probability, 45.0), 58.0)
 
     result, _risk = _interpret(fake_probability)
 
@@ -867,6 +876,13 @@ def analyze_image(file_path, filename, size_bytes):
         fake_probability = max(fake_probability, 42.0)
     features["human_present"] = human_present
 
+    # A filtered face with no filter-independent deepfake evidence is a
+    # *modified* capture (beauty filter / AR effect), not a synthetic one, so it
+    # is reported inconclusive - never as a deepfake.
+    if filtered and not strong_ai:
+        result = "inconclusive"
+        fake_probability = min(fake_probability, 58.0)
+
     risk = risk_label(fake_probability)
     ai_origin = classify_ai_origin("image", features, fake_probability)
     if no_face_gate:
@@ -912,11 +928,11 @@ def analyze_image(file_path, filename, size_bytes):
     elif not human_present and result == "fake":
         explanation += (" No face was detected, but several independent AI-generation "
                         "signals agree, so the image is reported as fake.")
-    if filter_score >= 0.35:
+    if filtered:
         explanation += (
             " A beauty filter, AR effect or cosmetic overlay was detected on the face "
-            "(unnatural skin smoothing or hue shift), so this is a modified capture "
-            "rather than an authentic one."
+            "(unnatural skin smoothing, hue shift or reshaping). This is a modified "
+            "capture, so the result is INCONCLUSIVE rather than a deepfake verdict."
         )
     if global_recompress:
         explanation += (" Note: the file shows whole-image recompression typical of a "
@@ -935,6 +951,9 @@ def analyze_image(file_path, filename, size_bytes):
         "ai_generated": ai_origin == "ai_generated",
         "ai_manipulated": ai_origin == "ai_manipulated",
         "fake_probability": round(fake_probability, 1),
+        "filtered": bool(filtered),
+        "filter_effect": round(filter_score, 4),
+        "strong_ai_evidence": bool(strong_ai),
         "trust_score": trust,
         "risk_level": risk,
         "explanation": explanation,
