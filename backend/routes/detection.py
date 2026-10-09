@@ -98,6 +98,11 @@ def _store_scan(user_id, scan_type, filename, original_filename, file_path, file
     metadata["suspicious_scale"] = result.get("suspicious_scale", 0)
     if result.get("heatmap_file"):
         metadata["heatmap_file"] = result.get("heatmap_file")
+    # Social-post link preview (thumbnail / caption / platform) so the source
+    # of a pasted post URL stays visible on the results page and in History.
+    for key in ("source_url", "platform", "post_thumbnail", "post_caption"):
+        if result.get(key):
+            metadata[key] = result[key]
     scan = ScanHistory(
         user_id=user_id,
         scan_type=scan_type,
@@ -246,10 +251,13 @@ def detect_post():
     file = request.files.get("file")
     caption = sanitize_text(request.form.get("caption", ""), 5_000)
     source_url = sanitize_text(request.form.get("source_url", ""), 2_000).strip()
+    image_url = sanitize_text(request.form.get("image_url", ""), 2_000).strip()
     user_id = int(get_jwt_identity())
 
     path = stored_name = original_filename = None
     size = 0
+    platform = platform_slug = ""
+    post_thumbnail = post_caption = ""
 
     has_file = bool(file and file.filename and file.filename.lower() not in ("null", "undefined"))
     if has_file:
@@ -259,69 +267,170 @@ def detect_post():
         path, stored_name, size = save_upload(file, Config.UPLOAD_FOLDER, file.filename)
         original_filename = sanitize_filename(file.filename)
     elif source_url:
-        from urllib.parse import urljoin
         from werkzeug.datastructures import FileStorage
         from utils.helpers import fetch_from_url
+        platform, platform_slug = _detect_platform(source_url)
+
+        # Try to open the link. Many social sites block server requests (403 /
+        # 429 / connection reset), so a failure here is expected often — fall
+        # back to whatever caption we already have instead of hard-failing.
+        page_ok = False
+        stream = None
+        content_type = ""
         try:
-            stream, size, content_type = fetch_from_url(source_url, Config.MAX_IMAGE_BYTES)
+            stream, size, content_type = fetch_from_url(
+                source_url, Config.MAX_IMAGE_BYTES, user_agent=_BROWSER_UA)
+            page_ok = True
         except ValueError as exc:
             return jsonify({"message": str(exc)}), 400
         except Exception:  # noqa: BLE001
-            return jsonify({"message": "Could not fetch the post URL."}), 400
+            page_ok = False
 
-        ext = _ext_for_content_type(content_type)
-        if ext in Config.ALLOWED_IMAGE:
-            fname = f"remote.{ext}"
+        direct_ext = _ext_for_content_type(content_type) if page_ok else None
+        if page_ok and direct_ext in Config.ALLOWED_IMAGE and _is_decodable_image(stream):
+            # The link itself points straight at an image / video.
+            fname = f"remote.{direct_ext}"
             fpath, stored_name, size = save_upload(
                 FileStorage(stream=stream, filename=fname), Config.UPLOAD_FOLDER, fname)
             path = fpath
             original_filename = source_url.split("/")[-1][:120] or "remote-image"
+            post_thumbnail = source_url
         else:
-            html = stream.read().decode("utf-8", "ignore")
-            og_img = _og_tag(html, "og:image")
-            if not og_img:
-                og_img = _first_img_src(html)
-            og_text = (_og_tag(html, "og:description") or _og_tag(html, "og:title")
-                       or _og_tag(html, "twitter:description") or "").strip()
-            caption = caption or og_text
+            # Parse the page for its Open Graph image + description.
+            og_img = ""
+            if page_ok:
+                html = stream.read().decode("utf-8", "ignore")
+                og_img = _usable_img_url(
+                    _og_tag(html, "og:image") or _og_tag(html, "og:image:secure_url")
+                    or _og_tag(html, "twitter:image") or _og_tag(html, "twitter:image:src"),
+                    source_url)
+                if not og_img:
+                    og_img = _usable_img_url(_first_img_src(html), source_url)
+                og_text = (_og_tag(html, "og:description") or _og_tag(html, "og:title")
+                           or _og_tag(html, "twitter:description") or "").strip()
+                site = _og_tag(html, "og:site_name")
+                if site:
+                    platform = site
+                # Last resort: fall back to the page's visible text so a bare
+                # link (news article, blog, etc.) can still be analysed.
+                if not og_text:
+                    og_text = _extract_visible_text(html)
+                post_caption = og_text
+                caption = caption or og_text
+
+            # The frontend already resolved the post image during its link
+            # preview — trust that if the page itself exposed nothing usable.
+            if not og_img and image_url:
+                og_img = _usable_img_url(image_url, source_url)
+
+            # Prefer the post's own image; otherwise analyze the caption text.
+            img_stream = img_name = None
             if og_img:
-                abs_url = urljoin(source_url, og_img)
                 try:
-                    istream, isize, ict = fetch_from_url(abs_url, Config.MAX_IMAGE_BYTES)
+                    img_stream, _isize, ict = fetch_from_url(
+                        og_img, Config.MAX_IMAGE_BYTES, user_agent=_BROWSER_UA)
+                    if not _is_decodable_image(img_stream):
+                        img_stream = None
+                    else:
+                        iext = _ext_for_content_type(ict) or "jpg"
+                        if iext not in Config.ALLOWED_IMAGE:
+                            iext = "jpg"
+                        img_name = f"remote.{iext}"
                 except Exception:  # noqa: BLE001
-                    return jsonify({"message": "Could not fetch the image inside the post URL."}), 400
-                iext = _ext_for_content_type(ict) or "jpg"
-                if iext not in Config.ALLOWED_IMAGE:
-                    iext = "jpg"
-                fname = f"remote.{iext}"
+                    img_stream = None
+            if img_stream is not None:
                 fpath, stored_name, size = save_upload(
-                    FileStorage(stream=istream, filename=fname), Config.UPLOAD_FOLDER, fname)
+                    FileStorage(stream=img_stream, filename=img_name),
+                    Config.UPLOAD_FOLDER, img_name)
                 path = fpath
                 original_filename = og_img.split("/")[-1][:120] or "remote-image"
-            elif len(caption.strip()) >= 30:
+                post_thumbnail = og_img
+            elif len(caption.strip()) >= 20:
                 stored_name = "url-caption.txt"
                 original_filename = "url-caption.txt"
                 size = len(caption.encode("utf-8"))
             else:
-                return jsonify({"message": "No usable image or text found in that post URL."}), 400
-    elif len(caption.strip()) >= 30:
+                # Nothing analysable was exposed. Still complete the scan (as
+                # UNCERTAIN) so the user always gets a result page instead of a
+                # dead-end error, with a note on how to get a definite verdict.
+                reason = ("The site blocked automated access, so this post's content could "
+                          if not page_ok else
+                          "This post didn't expose a usable image or caption, so its content could ")
+                _unreadable = {
+                    "scan_type": "post",
+                    "filename": "post-url.txt",
+                    "result": "inconclusive",
+                    "confidence": 50,
+                    "fake_probability": 50.0,
+                    "misinformation_probability": 50.0,
+                    "trust_score": 50,
+                    "risk_level": "medium",
+                    "explanation": reason + "not be read automatically. Paste the caption text "
+                                            "or upload a screenshot of the post for a Real/Fake verdict.",
+                    "recommendations": "Open the original post, verify the account and the source "
+                                       "before trusting or sharing it.",
+                    "suspicious_sections": [],
+                    "models": [],
+                    "reasons": [],
+                    "features": {},
+                    "metadata": {},
+                    "processing_time_ms": 0,
+                    "source_url": source_url,
+                    "platform": platform,
+                    "platform_slug": platform_slug,
+                    "post_thumbnail": post_thumbnail,
+                    "post_caption": post_caption or caption,
+                }
+                scan_id = _store_scan(user_id, "post", "post-url.txt", "post-url.txt",
+                                      None, 0, _unreadable, caption)
+                _unreadable["scan_id"] = scan_id
+                _unreadable["can_download_pdf"] = True
+                return jsonify({"result": _unreadable}), 200
+    elif len(caption.strip()) >= 20:
         stored_name = "caption.txt"
         original_filename = "caption.txt"
         size = len(caption.encode("utf-8"))
     else:
-        return jsonify({"message": "Upload an image, paste a caption (min 30 chars), or provide a post URL."}), 400
+        return jsonify({"message": "Upload an image, paste a caption (min 20 chars), or provide a post URL."}), 400
 
-    result = service.analyze("post", path, stored_name, size,
-                             caption=caption, source_url=source_url)
+    try:
+        result = service.analyze("post", path, stored_name, size,
+                                 caption=caption, source_url=source_url)
+    except Exception:  # noqa: BLE001
+        return jsonify({"message": "Could not analyse that post. Try a different "
+                                   "image or paste the caption text instead."}), 500
     if "error" in result:
         return jsonify({"message": result["error"]}), 500
+    if source_url:
+        result["source_url"] = source_url
+        result["platform"] = platform
+        result["platform_slug"] = platform_slug
+        result["post_thumbnail"] = post_thumbnail
+        result["post_caption"] = post_caption or caption
     scan_id = _store_scan(user_id, "post", stored_name, original_filename,
                           path, size, result, caption)
     result["scan_id"] = scan_id
     result["can_download_pdf"] = True
-    if source_url:
-        result["source_url"] = source_url
     return jsonify({"result": result}), 200
+
+
+@detect_bp.route("/post/preview", methods=["POST"])
+@jwt_required()
+def preview_post():
+    """Return the thumbnail, caption and platform name for a pasted post URL.
+
+    Used by the Social Post page to show a link preview before analysis.
+    """
+    if _rate_limit():
+        return jsonify({"message": "Too many requests. Try again later."}), 429
+    data = request.get_json(silent=True) or {}
+    url = sanitize_text(data.get("url", ""), 2_000).strip()
+    if not url:
+        return jsonify({"message": "Paste a post URL first."}), 400
+    if not url.lower().startswith(("http://", "https://")):
+        return jsonify({"message": "Enter a full http(s) URL."}), 400
+    preview = _extract_post_meta(url)
+    return jsonify({"preview": preview}), 200
 
 
 @detect_bp.route("/realtime", methods=["POST"])
@@ -485,7 +594,7 @@ def _ext_for_content_type(content_type: str):
         "x-midi": "mid", "midi": "mid",
         "pcm": "pcm", "l16": "pcm",
     }
-    ct = content_type.lower()
+    ct = (content_type or "").lower()
     for key, ext in mapping.items():
         if key in ct:
             return ext
@@ -514,3 +623,145 @@ def _first_img_src(html_text):
     import re
     match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html_text, re.IGNORECASE)
     return match.group(1).strip() if match else ""
+
+
+def _usable_img_url(raw, base_url):
+    """Resolve a scraped image reference to an absolute http(s) URL.
+
+    Returns "" for blank values and inline ``data:`` placeholders (several
+    sites, e.g. Instagram, embed base64 placeholders as ``og:image``).
+    """
+    from urllib.parse import urljoin, urlparse
+    if not raw:
+        return ""
+    raw = raw.strip()
+    if raw.lower().startswith("data:"):
+        return ""
+    abs_url = urljoin(base_url, raw)
+    return abs_url if urlparse(abs_url).scheme in ("http", "https") else ""
+
+
+def _extract_visible_text(html_text, limit=2000):
+    """Strip scripts/styles/tags and return readable page text (best effort).
+
+    Used as a last-resort caption source when a page has no Open Graph
+    description, so a bare URL can still produce a verdict.
+    """
+    import re
+    text = re.sub(r"(?is)<(script|style|noscript|svg|head)[^>]*>.*?</\1>", " ", html_text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    text = html.unescape(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit]
+
+
+def _is_decodable_image(stream):
+    """True if the buffered bytes open as an image the pipeline can read.
+
+    Guards against SVG / icon / corrupt payloads that some sites expose as
+    ``og:image`` but Pillow can't decode (which would otherwise crash the run).
+    """
+    from PIL import Image
+    try:
+        stream.seek(0)
+        with Image.open(stream) as im:
+            im.verify()
+        stream.seek(0)
+        return True
+    except Exception:  # noqa: BLE001
+        try:
+            stream.seek(0)
+        except Exception:  # noqa: BLE001
+            pass
+        return False
+
+
+# Browser-like UA so social platforms return their Open Graph tags.
+_BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+
+# (domains, display name, slug) - order matters (most specific first).
+_PLATFORM_MAP = (
+    (("youtube.com", "youtu.be", "youtube-nocookie.com"), "YouTube", "youtube"),
+    (("instagram.com", "instagr.am"), "Instagram", "instagram"),
+    (("twitter.com", "x.com", "t.co"), "X (Twitter)", "x"),
+    (("facebook.com", "fb.com", "fb.watch", "fb.me"), "Facebook", "facebook"),
+    (("tiktok.com",), "TikTok", "tiktok"),
+    (("linkedin.com", "lnkd.in"), "LinkedIn", "linkedin"),
+    (("reddit.com", "redd.it"), "Reddit", "reddit"),
+    (("pinterest.com", "pinterest.co.uk", "pin.it"), "Pinterest", "pinterest"),
+    (("threads.net", "threads.com"), "Threads", "threads"),
+    (("snapchat.com",), "Snapchat", "snapchat"),
+    (("telegram.org", "t.me", "telegram.me"), "Telegram", "telegram"),
+    (("whatsapp.com", "wa.me"), "WhatsApp", "whatsapp"),
+    (("tumblr.com",), "Tumblr", "tumblr"),
+    (("vimeo.com",), "Vimeo", "vimeo"),
+    (("medium.com",), "Medium", "medium"),
+    (("weibo.com",), "Weibo", "weibo"),
+    (("vk.com",), "VK", "vk"),
+    (("mastodon.social",), "Mastodon", "mastodon"),
+)
+
+
+def _detect_platform(url):
+    """Map a URL's host to a social platform (display name, slug)."""
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    for domains, name, slug in _PLATFORM_MAP:
+        for d in domains:
+            if host == d or host.endswith("." + d):
+                return name, slug
+    return (host or "Website", "web")
+
+
+def _extract_post_meta(source_url):
+    """Best-effort Open Graph scrape of a social post URL for a link preview.
+
+    Returns platform name/slug, thumbnail, caption, title and author. Network
+    failures degrade gracefully to just the platform name from the host.
+    """
+    from urllib.parse import urljoin
+    from utils.helpers import fetch_from_url
+
+    platform, platform_slug = _detect_platform(source_url)
+    preview = {
+        "url": source_url,
+        "platform": platform,
+        "platform_slug": platform_slug,
+        "thumbnail": "",
+        "caption": "",
+        "title": "",
+        "author": "",
+    }
+    try:
+        stream, _size, content_type = fetch_from_url(
+            source_url, min(Config.MAX_IMAGE_BYTES, 4 * 1024 * 1024),
+            user_agent=_BROWSER_UA)
+    except Exception:  # noqa: BLE001
+        return preview
+
+    if (content_type or "").lower().startswith("image/"):
+        preview["thumbnail"] = source_url
+        return preview
+
+    html_text = stream.read().decode("utf-8", "ignore")
+    og_img = (_og_tag(html_text, "og:image") or _og_tag(html_text, "og:image:secure_url")
+              or _og_tag(html_text, "twitter:image") or _og_tag(html_text, "twitter:image:src"))
+    if not og_img:
+        og_img = _first_img_src(html_text)
+    preview["thumbnail"] = _usable_img_url(og_img, source_url)
+    title = (_og_tag(html_text, "og:title") or _og_tag(html_text, "twitter:title")
+             or _og_tag(html_text, "title"))
+    caption = (_og_tag(html_text, "og:description") or _og_tag(html_text, "twitter:description")
+               or _og_tag(html_text, "description") or title)
+    preview["title"] = title.strip()
+    preview["caption"] = caption.strip()
+    preview["author"] = (_og_tag(html_text, "article:author")
+                         or _og_tag(html_text, "twitter:creator")
+                         or _og_tag(html_text, "author")).strip()
+    site = _og_tag(html_text, "og:site_name")
+    if site:
+        preview["platform"] = site.strip()
+    return preview

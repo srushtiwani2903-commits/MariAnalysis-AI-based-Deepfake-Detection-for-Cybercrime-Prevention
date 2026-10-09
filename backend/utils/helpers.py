@@ -42,10 +42,13 @@ def generate_reset_token():
     return secrets.token_urlsafe(48)
 
 
-def fetch_from_url(url: str, max_bytes: int = 50 * 1024 * 1024, timeout: int = 15):
+def fetch_from_url(url: str, max_bytes: int = 50 * 1024 * 1024, timeout: int = 15,
+                   user_agent: str = None):
     """Download a URL into a BytesIO, enforcing size + timeout + redirect limits.
 
     Returns (stream, size_bytes, content_type) or raises ValueError on failure.
+    Pass a browser-like ``user_agent`` when the target needs it (e.g. social
+    sites that only serve Open Graph tags to real browsers).
     """
     import io
     import urllib.parse
@@ -57,8 +60,12 @@ def fetch_from_url(url: str, max_bytes: int = 50 * 1024 * 1024, timeout: int = 1
     if not parsed.hostname:
         raise ValueError("Invalid URL.")
 
-    req = urllib.request.Request(
-        url, headers={"User-Agent": "MariAnalysis/1.0", "Accept": "*/*"})
+    req = urllib.request.Request(url, headers={
+        "User-Agent": user_agent or "MariAnalysis/1.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://" + parsed.hostname,
+    })
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         content_type = resp.headers.get("Content-Type", "")
         total = 0

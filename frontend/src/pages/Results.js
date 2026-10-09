@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ClockIcon, DocumentArrowDownIcon,
   ScaleIcon, BeakerIcon, FingerPrintIcon, QrCodeIcon, ShieldCheckIcon,
-  LockClosedIcon, CubeIcon, CpuChipIcon, WrenchScrewdriverIcon,
+  LockClosedIcon, CubeIcon, CpuChipIcon, WrenchScrewdriverIcon, LinkIcon,
 } from "@heroicons/react/24/outline";
 import ResultBadge from "../components/ResultBadge";
 import ConfidenceBar from "../components/ConfidenceBar";
@@ -208,7 +208,7 @@ export default function Results() {
           {/* Confidence meters */}
           <div className="space-y-5">
             <VerdictScale value={scan.fake_probability} result={scan.result} />
-            <ConfidenceBar value={scan.confidence} label={`Result Confidence (${scan.result})`}
+            <ConfidenceBar value={scan.confidence} label="Result Confidence"
               tone={scan.result === "authentic" ? "authentic" : scan.result === "fake" ? "fake" : undefined} />
             <ConfidenceBar value={suspiciousScale} label="Suspicious Scale" />
             <ConfidenceBar value={scan.fake_probability} label="AI / Fake Probability" />
@@ -282,6 +282,38 @@ export default function Results() {
           </button>
         )}
       </motion.div>
+
+      {/* Source post preview (social post scans) */}
+      {scan.scan_type === "post" && (meta.post_thumbnail || meta.post_caption || meta.platform) && (
+        <GlassCard hover={false}>
+          <h2 className="font-bold mb-4 flex items-center gap-2">
+            <LinkIcon className="w-5 h-5 text-neon-blue" /> Source Post
+          </h2>
+          <div className="flex gap-4">
+            {meta.post_thumbnail && (
+              <a href={meta.source_url || meta.post_thumbnail} target="_blank" rel="noreferrer"
+                className="w-32 h-32 shrink-0 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                <img src={meta.post_thumbnail} alt="source post" className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }} />
+              </a>
+            )}
+            <div className="min-w-0 flex-1 space-y-2">
+              {meta.platform && (
+                <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-gradient-to-br from-neon-cyan to-neon-blue text-white">
+                  {meta.platform}
+                </span>
+              )}
+              {meta.post_caption && (
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{meta.post_caption}</p>
+              )}
+              {meta.source_url && (
+                <a href={meta.source_url} target="_blank" rel="noreferrer"
+                  className="block text-xs text-neon-blue hover:underline break-all">{meta.source_url}</a>
+              )}
+            </div>
+          </div>
+        </GlassCard>
+      )}
 
       {/* XAI explanation */}
       <div className="grid lg:grid-cols-3 gap-6">

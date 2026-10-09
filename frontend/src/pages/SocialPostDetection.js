@@ -1,8 +1,35 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ShareIcon, PhotoIcon, LinkIcon, ExclamationTriangleIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { ShareIcon, PhotoIcon, LinkIcon, ExclamationTriangleIcon, SparklesIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import api from "../api/api";
+
+// Brand colours for the platform badge shown on the link preview.
+const PLATFORM_COLORS = {
+  youtube: "bg-red-600",
+  instagram: "bg-gradient-to-br from-pink-500 to-amber-400",
+  x: "bg-slate-900",
+  facebook: "bg-blue-600",
+  tiktok: "bg-slate-900",
+  linkedin: "bg-sky-700",
+  reddit: "bg-orange-600",
+  pinterest: "bg-red-700",
+  threads: "bg-slate-900",
+  snapchat: "bg-yellow-500",
+  telegram: "bg-sky-500",
+  whatsapp: "bg-green-500",
+  web: "bg-slate-500",
+};
+
+const URL_RE = /^https?:\/\/\S+\.\S+/i;
+
+// Accept "instagram.com/p/..." and turn it into a full https URL.
+const normalizeUrl = (u) => {
+  const t = (u || "").trim();
+  if (!t || /^https?:\/\//i.test(t)) return t;
+  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(t)) return "https://" + t;
+  return t;
+};
 
 // Social post detection: image (profile photo / media) + caption text, or a post URL.
 export default function SocialPostDetection() {
@@ -13,7 +40,11 @@ export default function SocialPostDetection() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [link, setLink] = useState(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkError, setLinkError] = useState("");
   const inputRef = useRef(null);
+  const lastFetchedUrl = useRef("");
 
   const pick = (f) => {
     setError("");
@@ -22,13 +53,44 @@ export default function SocialPostDetection() {
     setPreview(URL.createObjectURL(f));
   };
 
+  // Debounced link preview: after the URL is pasted, fetch the post's
+  // thumbnail + caption + platform name and show a card.
+  useEffect(() => {
+    const u = normalizeUrl(url);
+    if (!URL_RE.test(u)) {
+      setLink(null);
+      setLinkError("");
+      lastFetchedUrl.current = "";
+      return;
+    }
+    if (u === lastFetchedUrl.current) return;
+    const t = setTimeout(async () => {
+      setLinkBusy(true);
+      setLinkError("");
+      try {
+        const { data } = await api.post("/detect/post/preview", { url: u });
+        setLink(data.preview || null);
+        lastFetchedUrl.current = u;
+        // Auto-fill the caption from the post when the field is still empty.
+        setCaption((c) => (c.trim() ? c : (data.preview?.caption || "")));
+      } catch (e) {
+        setLink(null);
+        setLinkError(e.response?.data?.message || e.message);
+      } finally {
+        setLinkBusy(false);
+      }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [url]);
+
   const analyze = async () => {
     setError("");
     setBusy(true);
     try {
       const form = new FormData();
       if (file) form.append("file", file);
-      if (url.trim()) form.append("source_url", url.trim());
+      if (url.trim()) form.append("source_url", normalizeUrl(url));
+      if (link?.thumbnail) form.append("image_url", link.thumbnail);
       form.append("caption", caption.trim());
       const { data } = await api.post("/detect/post", form, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -46,10 +108,10 @@ export default function SocialPostDetection() {
         <span className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-neon-cyan to-neon-blue text-white mb-4">
           <ShareIcon className="w-8 h-8" />
         </span>
-        <h1 className="text-3xl font-bold">Social Post Detection</h1>
+        <h1 className="text-3xl font-bold">Post / URL Scan</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-2xl mx-auto">
-          Verify a social media post — combine the attached image with its caption text.
-          Fake-news and romance-scam posts often pair AI images with AI-written captions.
+          Paste any website or social post link and scan it for a <b>Real</b> or <b>Fake</b>
+          {" "}verdict. Adding the image or caption is optional — it just makes the result stronger.
         </p>
       </motion.div>
 
@@ -57,7 +119,7 @@ export default function SocialPostDetection() {
         className="glass-strong rounded-3xl p-6 sm:p-8 space-y-6">
         <div>
           <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-            Post URL <span className="font-normal">(optional — paste a social post link)</span>
+            Website / Post URL
           </label>
           <div className="flex items-center gap-2 rounded-2xl border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 px-3 focus-within:border-neon-blue/60">
             <LinkIcon className="w-4 h-4 text-slate-400" />
@@ -68,14 +130,58 @@ export default function SocialPostDetection() {
               placeholder="https://x.com/user/status/… or a direct image link"
               className="input !border-none !bg-transparent flex-1"
             />
+            {linkBusy && <ArrowPathIcon className="w-4 h-4 text-slate-400 animate-spin shrink-0" />}
           </div>
         </div>
+
+        {/* Link preview: platform + thumbnail + caption scraped from the post */}
+        {(linkBusy || link || linkError) && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/40 p-3">
+            {linkError && !linkBusy && (
+              <p className="text-xs text-rose-400 flex items-center gap-2">
+                <ExclamationTriangleIcon className="w-4 h-4" /> {linkError}
+              </p>
+            )}
+            {linkBusy && !link && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                <ArrowPathIcon className="w-4 h-4 animate-spin" /> Fetching post preview…
+              </p>
+            )}
+            {link && (
+              <div className="flex gap-3">
+                <div className="w-24 h-24 shrink-0 rounded-xl overflow-hidden bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
+                  {link.thumbnail ? (
+                    <img src={link.thumbnail} alt="post thumbnail" className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  ) : (
+                    <PhotoIcon className="w-8 h-8 text-slate-400" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 rounded-full text-white ${PLATFORM_COLORS[link.platform_slug] || PLATFORM_COLORS.web}`}>
+                      {link.platform}
+                    </span>
+                    {link.author && <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">by {link.author}</span>}
+                  </div>
+                  {link.title && <p className="text-sm font-semibold truncate">{link.title}</p>}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-3">
+                    {link.caption || (link.thumbnail
+                      ? "No caption text found in this post."
+                      : "Preview not available — this site blocks automated access. You can still upload a screenshot or paste the caption.")}
+                  </p>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         <div className="grid sm:grid-cols-2 gap-5">
           {/* Image */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-              Post image
+              Post image <span className="font-normal text-slate-400">(optional)</span>
             </label>
             <div
               onClick={() => inputRef.current?.click()}
@@ -99,7 +205,7 @@ export default function SocialPostDetection() {
           {/* Caption */}
           <div className="flex flex-col">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-              Post caption / text
+              Post caption / text <span className="font-normal text-slate-400">(optional)</span>
             </label>
             <textarea
               value={caption}
@@ -109,17 +215,17 @@ export default function SocialPostDetection() {
               className="input !rounded-2xl resize-y font-mono text-sm flex-1"
             />
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
-              Optional — but analyzing both improves accuracy.
+              Optional — auto-filled from the post when a link is pasted.
             </p>
           </div>
         </div>
 
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {file ? `Image: ${file.name}` : url.trim() ? `URL: ${url.trim()}` : "No image selected"} · {caption.trim().split(/\s+/).filter(Boolean).length} caption words
+            {url.trim() ? `URL: ${url.trim()}` : file ? `Image: ${file.name}` : "Paste a link, or add an image / caption"} · {caption.trim().split(/\s+/).filter(Boolean).length} caption words
           </p>
-          <button onClick={analyze} disabled={busy || (!file && !url.trim() && caption.trim().length < 30)} className="btn-primary">
-            <SparklesIcon className="w-5 h-5" /> {busy ? "Analyzing…" : "Analyze Post"}
+          <button onClick={analyze} disabled={busy || (!file && !url.trim() && caption.trim().length < 20)} className="btn-primary">
+            <SparklesIcon className="w-5 h-5" /> {busy ? "Scanning…" : "Scan for Real / Fake"}
           </button>
         </div>
 

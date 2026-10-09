@@ -31,6 +31,7 @@ export default function Footer() {
             <li><Link to="/detect/video" className="hover:text-neon-blue transition-colors">Video Detection</Link></li>
             <li><Link to="/detect/audio" className="hover:text-neon-blue transition-colors">Audio Detection</Link></li>
             <li><Link to="/detect/text" className="hover:text-neon-blue transition-colors">Text Detection</Link></li>
+            <li><Link to="/detect/social" className="hover:text-neon-blue transition-colors">Post / URL Scan</Link></li>
           </ul>
         </div>
 

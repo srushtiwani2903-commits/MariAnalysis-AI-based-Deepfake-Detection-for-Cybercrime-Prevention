@@ -81,7 +81,7 @@ export default function ConfidenceGauge({ value, label = "Confidence" }) {
         {v}%
       </motion.span>
       <div className="flex justify-between w-48 text-[10px] uppercase tracking-wider text-slate-400 mt-2">
-        <span>Authentic</span>
+        <span>Real</span>
         <span>0</span>
         <span>100</span>
         <span>Fake</span>

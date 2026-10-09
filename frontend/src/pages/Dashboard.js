@@ -52,7 +52,7 @@ const detectors = [
 const tools = [
   { to: "/detect/live-call", icon: ComputerDesktopIcon, title: "Live Call Check", desc: "Zoom / Meet / WhatsApp call guard", color: "from-teal-400 to-cyan-500" },
   { to: "/detect/email", icon: EnvelopeIcon, title: "Email Scanner", desc: "Phishing & AI-written mail", color: "from-pink-500 to-rose-400" },
-  { to: "/detect/social", icon: ShareIcon, title: "Social Post", desc: "Image + caption verification", color: "from-violet-500 to-neon-purple" },
+  { to: "/detect/social", icon: ShareIcon, title: "Post / URL Scan", desc: "Paste a link — Real vs Fake", color: "from-violet-500 to-neon-purple" },
   { to: "/evidence", icon: FingerPrintIcon, title: "Report Fraud", desc: "Evidence + case ID", color: "from-amber-400 to-orange-500" },
   { to: "/org-dashboard", icon: BuildingOffice2Icon, title: "Org Dashboard", desc: "Team threat overview", color: "from-emerald-400 to-teal-500" },
 ];
