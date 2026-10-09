@@ -15,9 +15,16 @@ DATASET_ROOT = os.path.join(Config.BASE_DIR, "models", "datasets")
 DATASET_REGISTRY = [
     {
         "media": "image",
+        "slug": "birdy654/cifake-real-and-ai-generated-synthetic-images",
+        "dir": "cifake",
+        "required": True,
+        "note": "CIFAKE: 60k real photos vs 60k AI-generated (32x32); the pendrive corpus.",
+    },
+    {
+        "media": "image",
         "slug": "ciplab/real-and-fake-face-detection",
         "dir": "faces_real_vs_fake",
-        "required": True,
+        "required": False,
         "note": "CelebA real faces + AI-generated fake faces for image CNN/ViT training.",
     },
     {

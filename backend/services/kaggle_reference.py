@@ -433,24 +433,66 @@ def _extra_image_sources_configured():
 
 @contextmanager
 def _extra_image_media(media_type=_DEFAULT_MEDIA):
-    """Yield optional extra image samples (Hugging Face / Google).
+    """Yield extra image samples to merge into a local reference profile.
 
-    Returns empty lists without any network access when no extra source is
-    configured, so the default Kaggle/local behaviour is unchanged.
+    Two independent contributors are combined here:
+
+    * **Pipeline merge** (``IMAGE_PIPELINE_MERGE``) - pull a fresh labelled
+      sample from the on-demand Kaggle image pipeline so every scan is scored
+      against BOTH the local corpus and the live pipeline data.
+    * **Extra sources** - optional Hugging Face / Google image repos. Returns
+      empty lists without any network access when none are configured, so the
+      default local/Kaggle behaviour is unchanged.
     """
-    if media_type != "image" or not _extra_image_sources_configured():
+    if media_type != "image":
         yield {"real": [], "fake": []}
         return
-    try:
-        from ml.image_pipeline import fetch_extra_images
-
-        with fetch_extra_images() as (per_class, _parent):
-            logger.info("Extra image sources provided: real=%d fake=%d",
-                        len(per_class.get("real", [])), len(per_class.get("fake", [])))
-            yield per_class
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Extra image sources failed, using local/Kaggle only: %s", exc)
+    want_pipeline = bool(getattr(Config, "IMAGE_PIPELINE_MERGE", False))
+    want_extra = _extra_image_sources_configured()
+    if not (want_pipeline or want_extra):
         yield {"real": [], "fake": []}
+        return
+
+    import shutil
+
+    parent = tempfile.mkdtemp(prefix="marianalysis_img_merge_")
+    try:
+        staging = os.path.join(parent, "staging")
+        os.makedirs(os.path.join(staging, "real"), exist_ok=True)
+        os.makedirs(os.path.join(staging, "fake"), exist_ok=True)
+
+        if want_pipeline:
+            try:
+                from ml.data_config import get_registry
+                from ml.image_pipeline import _kaggle_fetch
+
+                entry = next((e for e in get_registry()
+                              if e["media"] == "image"), None)
+                if entry:
+                    copied = _kaggle_fetch(
+                        entry, staging, Config.IMAGE_PIPELINE_IMAGES_PER_CLASS)
+                    logger.info("Pipeline merge (Kaggle %s): %s",
+                                entry["slug"], copied)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Pipeline Kaggle image merge failed: %s", exc)
+
+        if want_extra:
+            try:
+                from ml.image_pipeline import _fetch_sources
+
+                _fetch_sources(staging, ["huggingface", "google"],
+                               Config.IMAGE_PIPELINE_IMAGES_PER_CLASS)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Extra HF/Google image merge failed: %s", exc)
+
+        from ml.image_pipeline import _collect_staging
+
+        per_class = _collect_staging(staging)
+        logger.info("Merged pipeline images into reference: real=%d fake=%d",
+                    len(per_class.get("real", [])), len(per_class.get("fake", [])))
+        yield per_class
+    finally:
+        shutil.rmtree(parent, ignore_errors=True)
 
 
 def _reference_slug(media_type=_DEFAULT_MEDIA):

@@ -184,6 +184,12 @@ class Config:
     # fetched until a source is actually configured below.
     IMAGE_PIPELINE_IMAGES_PER_CLASS = int(os.environ.get("IMAGE_PIPELINE_IMAGES_PER_CLASS", 1000))
     IMAGE_HF_IMAGES_PER_CLASS = int(os.environ.get("IMAGE_HF_IMAGES_PER_CLASS", 300))
+    # When a local real/fake image dataset is present, also pull a labelled
+    # sample from the on-demand pipeline (Kaggle main image dataset + optional
+    # Hugging Face / Google sources) and merge it into the local reference
+    # profile, so every scan is scored against BOTH the local corpus and the
+    # live pipeline data.
+    IMAGE_PIPELINE_MERGE = os.environ.get("IMAGE_PIPELINE_MERGE", "true").lower() == "true"
     # Google Drive shareable file IDs for zipped real / fake (or AI-generated)
     # image archives. A fake-only archive is copied entirely to the fake class.
     IMAGE_GOOGLE_REAL_DRIVE_ID = os.environ.get("IMAGE_GOOGLE_REAL_DRIVE_ID", "")
