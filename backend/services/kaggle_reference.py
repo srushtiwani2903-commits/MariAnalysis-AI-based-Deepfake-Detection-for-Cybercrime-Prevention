@@ -118,6 +118,18 @@ class KaggleReference:
                     # Only auto-load the cache when it matches the local dataset
                     # source; otherwise ignore it (will rebuild).
                     if _is_local_source(profile.slug):
+                        # A cached ``local:<path>`` profile is only valid while
+                        # that dataset (e.g. the pendrive) is still connected.
+                        # If it vanished, drop the cache so the profile is
+                        # rebuilt from the live pipeline only.
+                        if not _cached_local_source_available(profile.slug):
+                            logger.info("Cached local dataset %s is unavailable; "
+                                        "will rebuild from pipeline.", profile.slug)
+                            try:
+                                os.remove(path)
+                            except OSError:
+                                pass
+                            continue
                         self._profiles[media_type] = profile
                         self._status[media_type] = "ready"
                         logger.info("Loaded cached local reference profile (%s).",
@@ -222,13 +234,18 @@ class KaggleReference:
         if media_type == "video":
             return self._build_video_profile()
 
-        # Image scans with no local dataset: use the multi-source image
-        # pipeline when any extra source (Hugging Face / Google) is configured.
+        # Image scans with no local dataset (e.g. the pendrive is unplugged):
+        # build the reference profile from the live pipeline only
+        # (Kaggle image registry + optional Hugging Face / Google).
         if media_type == "image":
+            logger.info("No local image dataset found; building profile from "
+                        "pipeline only.")
             with _extra_image_media(media_type) as extra:
                 if extra.get("real") or extra.get("fake"):
                     return self._build_profile_from_paths(
                         media_type, extra, "pipeline:image")
+                logger.warning("Pipeline produced no image samples; falling "
+                               "back to a raw Kaggle reference fetch.")
 
         from ml.kaggle_pipeline import resolve_credentials, write_kaggle_json
 
@@ -420,6 +437,17 @@ def _is_local_source(slug):
     restart reuses them instead of re-downloading the corpus.
     """
     return isinstance(slug, str) and (slug.startswith("local:") or slug.startswith("pipeline:"))
+
+
+def _cached_local_source_available(slug):
+    """Check whether a cached ``local:<root>`` dataset path still exists."""
+    if not isinstance(slug, str) or not slug.startswith("local:"):
+        return True
+    root = slug[6:]  # strip "local:"
+    try:
+        return os.path.isdir(root) and _real_fake_folders_exist(root, "image", depth=2)
+    except OSError:
+        return False
 
 
 def _extra_image_sources_configured():
