@@ -13,6 +13,48 @@ import { humanSize, timeAgo, formatDate } from "../utils/format";
 const FILTERS = ["all", "image", "video", "audio", "text"];
 const RESULTS = ["all", "fake", "authentic", "inconclusive"];
 
+const API_URL = process.env.REACT_APP_API_URL || "/api";
+
+// Thumbnail shown next to each history entry so it is clear which media was
+// scanned. Images (and image posts) render the stored original; videos render a
+// first-frame still; anything without a servable file falls back to an icon.
+function HistoryThumb({ scan }) {
+  const [failed, setFailed] = useState(false);
+  const type = scan.scan_type;
+  const hasMedia = type === "image" || type === "post" || type === "video";
+  const src = `${API_URL}/history/${scan.id}/media`;
+  const Icon = type === "video" ? FilmIcon
+    : type === "audio" ? MusicalNoteIcon
+    : type === "text" || type === "email" ? DocumentTextIcon
+    : PhotoIcon;
+  return (
+    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-neon-blue/15 to-neon-purple/15 border border-white/10 flex items-center justify-center">
+      {hasMedia && !failed ? (
+        type === "video" ? (
+          <video
+            src={`${src}#t=0.1`}
+            className="w-full h-full object-cover"
+            muted
+            playsInline
+            preload="metadata"
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <img
+            src={`${src}?thumb=1`}
+            alt={scan.filename}
+            loading="lazy"
+            className="w-full h-full object-cover"
+            onError={() => setFailed(true)}
+          />
+        )
+      ) : (
+        <Icon className="w-6 h-6 text-neon-blue" />
+      )}
+    </div>
+  );
+}
+
 export default function History() {
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
@@ -157,6 +199,7 @@ export default function History() {
                   <span className={`px-3 py-1.5 rounded-full text-xs font-bold border ${badge(s.result)}`}>
                     {s.result.toUpperCase()}
                   </span>
+                  <HistoryThumb scan={s} />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{s.filename}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">

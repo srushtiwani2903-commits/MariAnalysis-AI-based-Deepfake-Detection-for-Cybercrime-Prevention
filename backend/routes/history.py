@@ -1,7 +1,11 @@
 """Scan history endpoints: list, search, filter, detail, delete and stats."""
-from flask import Blueprint, jsonify, request
+import io
+import os
+
+from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
+from config import Config
 from extensions import db
 from models import Log, ScanHistory, _iso
 from utils.idps import audit
@@ -71,6 +75,44 @@ def detail(scan_id):
     if not scan or scan.user_id != user_id:
         return jsonify({"message": "Scan not found."}), 404
     return jsonify({"scan": scan.to_dict(include_full=True)})
+
+
+@history_bp.route("/<int:scan_id>/media", methods=["GET"])
+@jwt_required()
+def media(scan_id):
+    """Serve the stored original media for a scan (history thumbnails).
+
+    Add ``?thumb=1`` to get a small downscaled JPEG instead of the full file.
+    """
+    user_id = int(get_jwt_identity())
+    scan = db.session.get(ScanHistory, scan_id)
+    if not scan or scan.user_id != user_id:
+        return jsonify({"message": "Scan not found."}), 404
+
+    path = scan.file_path or ""
+    if not path or not os.path.isfile(path):
+        return jsonify({"message": "Original media is not available."}), 404
+
+    # Never serve anything outside the uploads directory (path-traversal guard).
+    upload_root = os.path.realpath(Config.UPLOAD_FOLDER)
+    real = os.path.realpath(path)
+    if not os.path.normcase(real).startswith(os.path.normcase(upload_root + os.sep)):
+        return jsonify({"message": "Invalid media path."}), 403
+
+    if request.args.get("thumb") and scan.scan_type in ("image", "post"):
+        try:
+            from PIL import Image as _Image
+            with _Image.open(real) as im:
+                im = im.convert("RGB")
+                im.thumbnail((160, 160))
+                buf = io.BytesIO()
+                im.save(buf, format="JPEG", quality=82)
+            buf.seek(0)
+            return send_file(buf, mimetype="image/jpeg")
+        except Exception:  # noqa: BLE001 - fall back to the original file
+            pass
+
+    return send_file(real, as_attachment=False, conditional=True)
 
 
 @history_bp.route("/<int:scan_id>", methods=["DELETE"])
