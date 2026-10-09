@@ -1,7 +1,9 @@
 # Optional analysis/kaggle dependencies for the heuristic engine + Kaggle data pipeline.
 # pip install -r requirements-ai.txt
 numpy>=2.3
-opencv-python>=4.12
+# Pin OpenCV < 5: the 5.0 wheels drop cv2.CascadeClassifier, which silently
+# disables all Haar face detection (every scan then reads "no face").
+opencv-python-headless>=4.12,<5
 librosa>=0.10.2
 mediapipe>=1.0
 kaggle==2.2.4

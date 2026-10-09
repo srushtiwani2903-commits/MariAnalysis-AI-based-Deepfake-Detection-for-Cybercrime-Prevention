@@ -443,14 +443,25 @@ def analyze_video(file_path, filename, size_bytes):
     # No human/face across the sampled frames -> inconclusive ("No face
     # detected"), never authentic. Strong AI signals still win.
     human_present = with_face > 0
+    cnn_says_fake = cnn_fake_pct is not None and cnn_fake_pct >= 65.0
+    cnn_says_authentic = cnn_fake_pct is not None and cnn_fake_pct <= 35.0
     strong_ai = (
-        (cnn_fake_pct is not None and cnn_fake_pct >= 65.0)
+        cnn_says_fake
         or base >= 0.70
         or (kaggle_info and kaggle_info.get("status") == "ready"
             and kaggle_info.get("fake_likelihood", 0.0) >= 0.75)
     )
     no_face_gate = False
-    if not human_present and not strong_ai:
+    if cnn_says_fake:
+        # Trained frame-CNN is confident -> authoritative fake verdict.
+        result = "fake"
+        fake_probability = max(fake_probability, 62.0)
+    elif cnn_says_authentic:
+        # Trained frame-CNN is confident -> authoritative authentic verdict;
+        # do not let a missed face flip a genuine clip to inconclusive.
+        result = "authentic"
+        fake_probability = min(fake_probability, 38.0)
+    elif not human_present and not strong_ai:
         result = "inconclusive"
         fake_probability = 50.0
         no_face_gate = True

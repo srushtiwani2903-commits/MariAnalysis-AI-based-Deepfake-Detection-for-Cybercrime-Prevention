@@ -832,14 +832,29 @@ def analyze_image(file_path, filename, size_bytes):
     # histogram entropy; heuristic "AI" votes on such files are noise, so it
     # must fall through to inconclusive rather than being forced to fake.
     has_content = features.get("histogram_entropy", 0.0) >= 5.0
+    generator_tag = bool(meta.get("has_ai_generator_tag"))
+    cnn_available = cnn_fake_pct is not None
+    cnn_says_fake = cnn_available and cnn_fake_pct >= 65.0
+    cnn_says_authentic = cnn_available and cnn_fake_pct <= 35.0
     strong_ai = has_content and (
-        bool(meta.get("has_ai_generator_tag"))
+        generator_tag
+        or cnn_says_fake
         or ai_signals >= 4
-        or (cnn_fake_pct is not None and cnn_fake_pct >= 65.0)
         or (spectral_score >= 0.55 and noise_score >= 0.45 and texture_score >= 0.75)
     )
     no_face_gate = False
-    if not human_present and not strong_ai:
+    if cnn_says_fake:
+        # The trained model is confident -> authoritative fake verdict.
+        result = "fake"
+        fake_probability = max(fake_probability, 62.0)
+    elif cnn_says_authentic and not generator_tag and has_content:
+        # The trained model is confident -> authoritative authentic verdict.
+        # A genuine capture must never be flipped by the weak heuristics or by
+        # a face the Haar detector happened to miss. Blank/near-empty frames
+        # (no real content) are excluded so they stay inconclusive.
+        result = "authentic"
+        fake_probability = min(fake_probability, 38.0)
+    elif not human_present and not strong_ai:
         result = "inconclusive"
         fake_probability = 50.0
         no_face_gate = True
