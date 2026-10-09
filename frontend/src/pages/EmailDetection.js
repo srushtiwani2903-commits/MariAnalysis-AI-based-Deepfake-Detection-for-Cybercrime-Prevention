@@ -124,6 +124,36 @@ export default function EmailDetection() {
                 {result.message || "Analysis complete. Review the flagged signals below."}
               </p>
             </div>
+            {result?.format_report && (
+              <div className="rounded-2xl border border-slate-200 dark:border-white/10 px-5 py-4">
+                <p className="font-semibold flex items-center gap-2 text-sm">
+                  <span className={`h-2 w-2 rounded-full ${result.format_report.format_ok ? "bg-emerald-400" : "bg-amber-400"}`} />
+                  {result.format_report.format_ok
+                    ? "Matches the standard email format"
+                    : "Not in the standard email format"}
+                </p>
+                {result.format_report.present_headers?.length > 0 && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Headers found: {result.format_report.present_headers.join(", ")}
+                  </p>
+                )}
+                {result.format_report.missing_headers?.length > 0 && (
+                  <p className="text-xs text-amber-500 mt-0.5">
+                    Missing: {result.format_report.missing_headers.join(", ")}
+                  </p>
+                )}
+                {result.format_report.findings?.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {result.format_report.findings.map((f, i) => (
+                      <li key={i} className="text-xs text-rose-400 flex items-start gap-1.5">
+                        <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {reasons.length > 0 && (
               <ul className="space-y-2">
                 {reasons.slice(0, 10).map((r, i) => (
