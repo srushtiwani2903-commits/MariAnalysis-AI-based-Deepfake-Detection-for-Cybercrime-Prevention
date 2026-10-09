@@ -469,8 +469,11 @@ def _extra_image_media(media_type=_DEFAULT_MEDIA):
                 entry = next((e for e in get_registry()
                               if e["media"] == "image"), None)
                 if entry:
+                    kaggle_entry = {"source": "kaggle", "name": entry["slug"],
+                                    "label": None}
                     copied = _kaggle_fetch(
-                        entry, staging, Config.IMAGE_PIPELINE_IMAGES_PER_CLASS)
+                        kaggle_entry, staging,
+                        Config.IMAGE_PIPELINE_IMAGES_PER_CLASS)
                     logger.info("Pipeline merge (Kaggle %s): %s",
                                 entry["slug"], copied)
             except Exception as exc:  # noqa: BLE001
