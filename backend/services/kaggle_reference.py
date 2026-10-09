@@ -206,9 +206,14 @@ class KaggleReference:
 
     def _build_profile(self, media_type):
         # Local dataset mode (image scans compare against a real/fake folder
-        # you already have on disk instead of hitting Kaggle).
+        # you already have on disk instead of hitting Kaggle). Optional extra
+        # Hugging Face / Google image sources are merged in when configured.
         local_root = _local_dataset_root(media_type)
         if local_root:
+            if media_type == "image":
+                with _extra_image_media(media_type) as extra:
+                    return self._build_profile_from_local(media_type, local_root,
+                                                          extra=extra)
             return self._build_profile_from_local(media_type, local_root)
 
         # Video scans are compared against the multi-source pipeline corpus
@@ -216,6 +221,14 @@ class KaggleReference:
         # there instead of forcing a raw Kaggle sample fetch.
         if media_type == "video":
             return self._build_video_profile()
+
+        # Image scans with no local dataset: use the multi-source image
+        # pipeline when any extra source (Hugging Face / Google) is configured.
+        if media_type == "image":
+            with _extra_image_media(media_type) as extra:
+                if extra.get("real") or extra.get("fake"):
+                    return self._build_profile_from_paths(
+                        media_type, extra, "pipeline:image")
 
         from ml.kaggle_pipeline import resolve_credentials, write_kaggle_json
 
@@ -279,12 +292,40 @@ class KaggleReference:
                     dict(profile.samples))
         return profile
 
-    def _build_profile_from_local(self, media_type, root):
+    def _build_profile_from_paths(self, media_type, per_class, slug):
+        """Build per-class feature stats directly from a path dict.
+
+        ``per_class`` is ``{'real': [paths], 'fake': [paths]}`` (e.g. from the
+        Hugging Face / Google image pipeline). Nothing is persisted.
+        """
+        keys = _KEYS_BY_MEDIA.get(media_type, _KEYS_BY_MEDIA[_DEFAULT_MEDIA])
+        profile = _Profile(slug)
+        for cls in ("real", "fake"):
+            vectors = [_features(p, media_type) for p in per_class.get(cls, [])]
+            vectors = [v for v in vectors if v is not None]
+            profile.samples[cls] = len(vectors)
+            stats = defaultdict(list)
+            for v in vectors:
+                for key in keys:
+                    stats[key].append(v[key])
+            profile.classes[cls] = {
+                key: _mean_std(values) for key, values in stats.items()
+            }
+        if profile.samples.get("fake", 0) < 5 or profile.samples.get("real", 0) < 5:
+            raise RuntimeError(
+                "Not enough labelled images fetched from the pipeline sources "
+                f"(real={profile.samples.get('real', 0)}, "
+                f"fake={profile.samples.get('fake', 0)}).")
+        return profile
+
+    def _build_profile_from_local(self, media_type, root, extra=None):
         """Build per-class feature stats from a local real/fake folder set.
 
         ``root`` should contain ``real/`` and ``fake/`` subfolders (optionally
         train/test/valid splits whose basenames are also matched). Uses up to
-        MAX_PER_CLASS media items per class (images or videos).
+        MAX_PER_CLASS media items per class (images or videos). ``extra`` is an
+        optional ``{'real': [paths], 'fake': [paths]}`` dict (e.g. Google /
+        Hugging Face images) appended to the local samples.
         """
         keys = _KEYS_BY_MEDIA.get(media_type, _KEYS_BY_MEDIA[_DEFAULT_MEDIA])
         # Image profiles cap the corpus with IMAGE_REFERENCE_MAX_PER_CLASS,
@@ -349,6 +390,8 @@ class KaggleReference:
             vectors = []
             for _cls, path in _collect(dirs):
                 vectors.append(_features(path, media_type))
+            for path in (extra or {}).get(cls, []):
+                vectors.append(_features(path, media_type))
             vectors = [v for v in vectors if v is not None]
             profile.samples[cls] = len(vectors)
             stats = defaultdict(list)
@@ -377,6 +420,37 @@ def _is_local_source(slug):
     restart reuses them instead of re-downloading the corpus.
     """
     return isinstance(slug, str) and (slug.startswith("local:") or slug.startswith("pipeline:"))
+
+
+def _extra_image_sources_configured():
+    """True when optional Hugging Face / Google image sources are configured."""
+    return bool(
+        getattr(Config, "IMAGE_GOOGLE_REAL_DRIVE_ID", "")
+        or getattr(Config, "IMAGE_GOOGLE_FAKE_DRIVE_ID", "")
+        or getattr(Config, "IMAGE_HF_DATASETS", "")
+    )
+
+
+@contextmanager
+def _extra_image_media(media_type=_DEFAULT_MEDIA):
+    """Yield optional extra image samples (Hugging Face / Google).
+
+    Returns empty lists without any network access when no extra source is
+    configured, so the default Kaggle/local behaviour is unchanged.
+    """
+    if media_type != "image" or not _extra_image_sources_configured():
+        yield {"real": [], "fake": []}
+        return
+    try:
+        from ml.image_pipeline import fetch_extra_images
+
+        with fetch_extra_images() as (per_class, _parent):
+            logger.info("Extra image sources provided: real=%d fake=%d",
+                        len(per_class.get("real", [])), len(per_class.get("fake", [])))
+            yield per_class
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Extra image sources failed, using local/Kaggle only: %s", exc)
+        yield {"real": [], "fake": []}
 
 
 def _reference_slug(media_type=_DEFAULT_MEDIA):

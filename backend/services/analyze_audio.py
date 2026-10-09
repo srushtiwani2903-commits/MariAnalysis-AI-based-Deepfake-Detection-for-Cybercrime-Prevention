@@ -52,49 +52,100 @@ def _librosa_features(path):
         rmse = float(np.mean(librosa.feature.rms(y=y)[0]))
 
         # ---- human-voice presence cues ---------------------------------- #
-        # Speech uses the 300-3400 Hz band and has intermittent (active)
-        # energy; silence is near-zero and music leans on low-frequency
-        # content. These cues let us gate "no human voice -> inconclusive".
-        rms_overall = float(np.sqrt(np.mean(y ** 2)))
-        frame_len = max(1, int(0.025 * sr))
-        hop = max(1, int(0.010 * sr))
-        if len(y) >= frame_len:
-            n_frames = 1 + (len(y) - frame_len) // hop
-            energies = np.array([
-                float(np.sqrt(np.mean(y[i * hop:i * hop + frame_len] ** 2)))
-                for i in range(n_frames)
-            ])
-        else:
-            energies = np.array([rms_overall])
-        mean_e = float(np.mean(energies)) if len(energies) else 0.0
-        active_ratio = (float(np.mean(energies > max(1e-4, 0.5 * mean_e)))
-                        if len(energies) else 0.0)
-
-        spectrum = np.abs(np.fft.rfft(y))
-        freqs = np.fft.rfftfreq(len(y), 1.0 / sr)
-        total_spec = float(np.sum(spectrum)) + 1e-12
-        speech_band = float(np.sum(spectrum[(freqs >= 300) & (freqs <= 3400)])) / total_spec
-        low_band = float(np.sum(spectrum[(freqs >= 0) & (freqs < 200)])) / total_spec
-
-        # A human voice is audible, intermittent and mostly in the speech band;
-        # near-silent or bass-dominated (music) content fails this gate.
-        voice_present = bool(
-            rms_overall > 0.01 and active_ratio > 0.15 and speech_band >= 0.35
-            and not (low_band > 0.6 and speech_band < 0.45)
-        )
+        cues = _voice_cues(y, sr)
 
         return {
             "spectral_flatness": round(spec_flat, 4),
             "zero_crossing_rate": round(zcr, 4),
             "mfcc_variance": round(mfcc_var, 2),
             "rms_energy": round(rmse, 4),
-            "speech_band_ratio": round(speech_band, 4),
-            "low_band_ratio": round(low_band, 4),
-            "active_ratio": round(active_ratio, 4),
-            "voice_present": voice_present,
+            **cues,
             "duration_seconds": round(len(y) / sr, 2),
             "sample_rate": sr,
         }, True
+    except Exception:
+        return {}, False
+
+
+def _voice_cues(y, sr):
+    """Human-voice presence cues from a mono float signal.
+
+    Speech uses the 300-3400 Hz band and has intermittent (active) energy;
+    silence is near-zero and music leans on low-frequency content. These cues
+    gate the "no human voice -> inconclusive" rule.
+    """
+    import numpy as np
+
+    y = np.asarray(y, dtype=np.float64)
+    rms_overall = float(np.sqrt(np.mean(y ** 2))) if len(y) else 0.0
+    frame_len = max(1, int(0.025 * sr))
+    hop = max(1, int(0.010 * sr))
+    if len(y) >= frame_len:
+        n_frames = 1 + (len(y) - frame_len) // hop
+        energies = np.array([
+            float(np.sqrt(np.mean(y[i * hop:i * hop + frame_len] ** 2)))
+            for i in range(n_frames)
+        ])
+    else:
+        energies = np.array([rms_overall])
+    mean_e = float(np.mean(energies)) if len(energies) else 0.0
+    active_ratio = (float(np.mean(energies > max(1e-4, 0.5 * mean_e)))
+                    if len(energies) else 0.0)
+    if len(y):
+        spectrum = np.abs(np.fft.rfft(y))
+        freqs = np.fft.rfftfreq(len(y), 1.0 / sr)
+    else:
+        spectrum, freqs = np.zeros(1), np.zeros(1)
+    total_spec = float(np.sum(spectrum)) + 1e-12
+    speech_band = float(np.sum(spectrum[(freqs >= 300) & (freqs <= 3400)])) / total_spec
+    low_band = float(np.sum(spectrum[(freqs >= 0) & (freqs < 200)])) / total_spec
+    voice_present = bool(
+        rms_overall > 0.01 and active_ratio > 0.15 and speech_band >= 0.35
+        and not (low_band > 0.6 and speech_band < 0.45)
+    )
+    return {
+        "speech_band_ratio": round(speech_band, 4),
+        "low_band_ratio": round(low_band, 4),
+        "active_ratio": round(active_ratio, 4),
+        "voice_present": voice_present,
+    }
+
+
+def _wav_voice_features(path):
+    """Fallback voice-presence detection for PCM WAV files without librosa.
+
+    Returns (cues, ok). Only WAV is supported here; other formats still need
+    librosa. This keeps the "no human voice -> inconclusive" rule working on a
+    minimal install (stdlib ``wave`` + numpy).
+    """
+    try:
+        import wave
+
+        import numpy as np
+
+        with wave.open(path, "rb") as wf:
+            channels = wf.getnchannels()
+            width = wf.getsampwidth()
+            sr = wf.getframerate()
+            raw = wf.readframes(min(wf.getnframes(), sr * 30))
+        if not raw or sr <= 0:
+            return {}, False
+        if width == 2:
+            data = np.frombuffer(raw, dtype="<i2").astype(np.float64) / 32768.0
+        elif width == 1:
+            data = (np.frombuffer(raw, dtype=np.uint8).astype(np.float64) - 128.0) / 128.0
+        elif width == 4:
+            data = np.frombuffer(raw, dtype="<i4").astype(np.float64) / 2147483648.0
+        else:
+            return {}, False
+        if channels > 1:
+            data = data.reshape(-1, channels).mean(axis=1)
+        if len(data) == 0:
+            return {}, False
+        cues = _voice_cues(data, sr)
+        cues["sample_rate"] = sr
+        cues["duration_seconds"] = round(len(data) / sr, 2)
+        return cues, True
     except Exception:
         return {}, False
 
@@ -114,6 +165,14 @@ def analyze_audio(file_path, filename, size_bytes):
     start = time.time()
     header = _read_wav_header(file_path)
     lib_features, has_librosa = _librosa_features(file_path)
+    has_voice_analysis = has_librosa
+    if not has_librosa:
+        # Minimal install (no librosa): still gate "no human voice" for PCM WAV
+        # via the stdlib fallback. Other formats degrade to inconclusive.
+        wav_cues, has_wav = _wav_voice_features(file_path)
+        if has_wav:
+            lib_features = wav_cues
+            has_voice_analysis = True
     file_hash = _sha256(file_path)
 
     features = {**header, **lib_features}
@@ -167,7 +226,7 @@ def analyze_audio(file_path, filename, size_bytes):
     # With no human voice (silence / music) the verdict must be inconclusive
     # ("No human voice detected"), never authentic or fake. When librosa could
     # not decode the file we simply keep the already-inconclusive fallback.
-    voice_present = bool(features.get("voice_present", True)) if has_librosa else True
+    voice_present = bool(features.get("voice_present", True)) if has_voice_analysis else True
     human_present = voice_present
     strong_ai = (
         base >= 0.65
@@ -175,11 +234,11 @@ def analyze_audio(file_path, filename, size_bytes):
             and features.get("prosody_variance", 1) <= 0.35)
     )
     no_voice_gate = False
-    if has_librosa and not human_present and not strong_ai:
+    if has_voice_analysis and not human_present and not strong_ai:
         result = "inconclusive"
         fake_probability = 50.0
         no_voice_gate = True
-    elif has_librosa and not human_present and strong_ai:
+    elif has_voice_analysis and not human_present and strong_ai:
         result = "fake"
         fake_probability = max(fake_probability, 62.0)
     features["human_present"] = human_present

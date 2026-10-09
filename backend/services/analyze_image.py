@@ -201,9 +201,13 @@ def _noise_pattern_analysis(image):
         autocorr_vals = []
         for c in range(3):
             n = noise[:, :, c].flatten()
-            if len(n) > 1:
-                corr = float(np.corrcoef(n[:-1], n[1:])[0, 1])
-                autocorr_vals.append(abs(corr))
+            # A flat/constant channel gives a zero-variance slice -> corrcoef
+            # returns NaN with a divide warning. Skip those instead.
+            if len(n) > 1 and float(np.std(n)) > 1e-9:
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    corr = float(np.corrcoef(n[:-1], n[1:])[0, 1])
+                if np.isfinite(corr):
+                    autocorr_vals.append(abs(corr))
         spatial_correlation = sum(autocorr_vals) / max(1, len(autocorr_vals))
 
         # AI images: uniform noise across channels + low spatial correlation.
@@ -824,7 +828,11 @@ def analyze_image(file_path, filename, size_bytes):
     # AI-generation signals still win (an AI image without a face is fake), but
     # a weak/ambiguous no-face scan is never allowed to read "authentic".
     human_present = face["faces_detected"] > 0
-    strong_ai = (
+    # A flat/blank image (solid colour, near-empty frame) has almost no
+    # histogram entropy; heuristic "AI" votes on such files are noise, so it
+    # must fall through to inconclusive rather than being forced to fake.
+    has_content = features.get("histogram_entropy", 0.0) >= 5.0
+    strong_ai = has_content and (
         bool(meta.get("has_ai_generator_tag"))
         or ai_signals >= 4
         or (cnn_fake_pct is not None and cnn_fake_pct >= 65.0)
