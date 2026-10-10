@@ -8,6 +8,7 @@ import {
 } from "@heroicons/react/24/outline";
 import GlassCard from "../components/GlassCard";
 import api from "../api/api";
+import { useAuth } from "../context/AuthContext";
 import { humanSize, timeAgo, formatDate } from "../utils/format";
 
 const FILTERS = ["all", "image", "video", "audio", "text"];
@@ -56,6 +57,7 @@ function HistoryThumb({ scan }) {
 }
 
 export default function History() {
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -64,8 +66,11 @@ export default function History() {
   const [type, setType] = useState(searchParams.get("type") || "all");
   const [result, setResult] = useState(searchParams.get("result") || "all");
   const [activeTab, setActiveTab] = useState(searchParams.get("type") || "all");
+  const [scope, setScope] = useState("self");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const isAdmin = !!user?.is_admin;
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -73,6 +78,7 @@ export default function History() {
     if (q) params.set("q", q);
     if (type !== "all") params.set("type", type);
     if (result !== "all") params.set("result", result);
+    if (isAdmin && scope === "all") params.set("scope", "all");
     api
       .get(`/history?${params}`)
       .then((res) => {
@@ -88,7 +94,7 @@ export default function History() {
         }
       })
       .finally(() => setLoading(false));
-  }, [page, q, type, result]);
+  }, [page, q, type, result, scope, isAdmin]);
 
   useEffect(() => {
     const t = setTimeout(fetchData, q ? 400 : 0);
@@ -118,6 +124,9 @@ export default function History() {
     : r === "authentic" ? "bg-emerald-500/15 text-emerald-400 border-emerald-400/30"
     : "bg-amber-500/15 text-amber-400 border-amber-400/30";
 
+  const verdictText = (r) =>
+    r === "fake" ? "FAKE" : r === "authentic" ? "REAL" : "UNCERTAIN";
+
   return (
     <div className="container-app py-10 space-y-6">
       <div className="flex items-center gap-3">
@@ -126,6 +135,26 @@ export default function History() {
           <h1 className="text-2xl font-bold">Scan History</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{total} scans recorded</p>
         </div>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-1 bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl p-1 rounded-lg border border-slate-200 dark:border-white/10">
+            {[
+              { key: "self", label: "My Scans" },
+              { key: "all", label: "All Scans" },
+            ].map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => { setScope(opt.key); setPage(1); }}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  scope === opt.key
+                    ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-white/5"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tab Navigation */}
@@ -171,7 +200,7 @@ export default function History() {
           <div className="flex items-center gap-2">
             <FunnelIcon className="w-4 h-4 text-slate-400" />
             <select value={result} onChange={(e) => { setResult(e.target.value); setPage(1); }} className="input !w-auto">
-              {RESULTS.map((r) => <option key={r} value={r}>result: {r}</option>)}
+              {RESULTS.map((r) => <option key={r} value={r}>result: {r === "all" ? "all" : verdictText(r)}</option>)}
             </select>
           </div>
         </div>
@@ -197,13 +226,14 @@ export default function History() {
               <GlassCard hover={false} className="!p-4">
                 <div className="flex flex-wrap items-center gap-4">
                   <span className={`px-3 py-1.5 rounded-full text-xs font-bold border ${badge(s.result)}`}>
-                    {s.result.toUpperCase()}
+                    {verdictText(s.result)}
                   </span>
                   <HistoryThumb scan={s} />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{s.filename}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       #{s.id} · {s.scan_type} · {humanSize(s.file_size)} · {formatDate(s.created_at)} ({timeAgo(s.created_at)})
+                      {isAdmin && scope === "all" && s.owner && ` · by ${s.owner}`}
                     </p>
                   </div>
                   <span className="font-mono text-sm font-bold text-neon-blue">

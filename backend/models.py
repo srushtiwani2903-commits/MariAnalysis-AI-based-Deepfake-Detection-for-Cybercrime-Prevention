@@ -117,6 +117,8 @@ class ScanHistory(db.Model):
         data = {
             "id": self.id,
             "user_id": self.user_id,
+            "owner": self.user.username if self.user else None,
+            "owner_email": self.user.email if self.user else None,
             "scan_type": self.scan_type,
             "filename": self.original_filename or self.filename,
             "file_size": self.file_size,

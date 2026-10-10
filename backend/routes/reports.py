@@ -7,7 +7,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from config import Config
 from extensions import db
-from models import BlockchainBlock, EvidenceCase, Log, Report, ScanHistory
+from models import BlockchainBlock, EvidenceCase, Log, Report, ScanHistory, User
 from utils.idps import audit
 from utils.report_generator import (generate_csv_report, generate_pdf_report,
                                     generate_qr_image)
@@ -16,11 +16,17 @@ reports_bp = Blueprint("reports", __name__)
 
 
 def _get_owned_scan(scan_id):
+    """Return the scan if the requester owns it, or is an admin (team view)."""
     user_id = int(get_jwt_identity())
     scan = db.session.get(ScanHistory, scan_id)
-    if not scan or scan.user_id != user_id:
+    if not scan:
         return None
-    return scan
+    if scan.user_id == user_id:
+        return scan
+    user = db.session.get(User, user_id)
+    if user and user.is_admin:
+        return scan
+    return None
 
 
 @reports_bp.route("/<int:scan_id>/pdf", methods=["GET"])

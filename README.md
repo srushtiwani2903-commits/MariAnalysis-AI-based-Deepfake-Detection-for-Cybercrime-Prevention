@@ -202,6 +202,40 @@ powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
 > This registers a shortcut in *your* Windows Startup folder, so it only affects
 > your own machine — each collaborator runs the same one-liner on their PC.
 
+### 4) Shared history across multiple laptops (team mode)
+
+Several admins on several laptops normally end up with **separate** history,
+because each machine runs its own `deepfake.db`. To get one combined,
+real-time history:
+
+1. **Pick one laptop as the host** and start the backend + frontend there as
+   usual. Find its LAN IP (`ipconfig` → IPv4, e.g. `192.168.1.20`).
+2. On the host, allow inbound port 3000 through the firewall (admin PowerShell):
+   `New-NetFirewallRule -DisplayName "MariAnalysis FE" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow`
+3. On the **other laptops**, stop their own backend/frontend and just open
+   `http://<host-ip>:3000` in a browser. The CRA proxy forwards `/api` to the
+   host's backend, so every scan is written to the **one shared database** and
+   appears in everyone's history in real time.
+   - Each admin should register a **separate account** (same account on two
+     laptops triggers the single-session rule and logs one out).
+   - For plain-`http` LAN use set `JWT_COOKIE_SECURE=false` in `backend/.env`,
+     otherwise the browser drops the session cookie.
+4. **Global admin view** — an admin now sees a **My Scans / All Scans** toggle
+   on the History page; *All Scans* shows every user's scans with the owner
+   name. Reports (PDF/CSV/QR/heatmap) for any scan are downloadable by an admin.
+5. **Bring in past history** from a laptop that ran its own DB before:
+
+   ```bash
+   cd backend
+   python merge_history.py --source "C:\path\to\other\backend\deepfake.db"
+   python merge_history.py --source "..." --dry-run   # preview first
+   ```
+
+   It remaps users (by email/username, creating any missing ones), imports
+   scans + predictions + reports, copies the media/report files into this
+   project, and is safe to re-run (already-present scans are skipped). Stop the
+   backend before merging so SQLite isn't locked.
+
 ---
 
 ## 🔌 API Endpoints (summary)
